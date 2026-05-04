@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { SequenceEngine } from './audio/engine.ts';
-import { ensureWindyInitialized, traceProgram } from './interpreter/windy.ts';
+import {
+  WindyDebugger,
+  ensureWindyInitialized,
+  traceProgram,
+  type DebugSnapshot,
+} from './interpreter/windy.ts';
 import './App.css';
 
 const DEFAULT_PROGRAM = `→ 1 2 + . @
@@ -8,31 +13,55 @@ const DEFAULT_PROGRAM = `→ 1 2 + . @
 
 const EXAMPLES: Record<string, string> = {
   'east-add': '→ 1 2 + . @\n',
-  'spiral': `→ 7 0 g . v
+  spiral: `→ 7 0 g . v
 ^         <
 @ . g 0 0 ←
 `,
   'gust-rotate': `→ 4 ≫ ↘ ↙ ↖ ↗ @
 `,
-  'storm': `→ t @
+  storm: `→ t @
    ↑
    <
 `,
 };
 
+type Mode = 'play' | 'debug';
+
 function App() {
   const [bpm, setBpm] = useState(360);
   const [code, setCode] = useState(DEFAULT_PROGRAM);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
-  const [info, setInfo] = useState<{ events: number; durationSec: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>('play');
+
+  // play 모드 상태
+  const [playStatus, setPlayStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const [playInfo, setPlayInfo] = useState<{ events: number; durationSec: number } | null>(null);
+  const [playError, setPlayError] = useState<string | null>(null);
+
+  // debug 모드 상태
+  const debuggerRef = useRef<WindyDebugger | null>(null);
+  const [snapshot, setSnapshot] = useState<DebugSnapshot | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   const ctxRef = useRef<AudioContext | null>(null);
   const engineRef = useRef<SequenceEngine | null>(null);
 
   useEffect(() => {
     void ensureWindyInitialized();
+    return () => {
+      debuggerRef.current?.free();
+      debuggerRef.current = null;
+    };
   }, []);
+
+  // 코드/모드 변경 시 디버그 세션 무효화
+  useEffect(() => {
+    if (debuggerRef.current) {
+      debuggerRef.current.free();
+      debuggerRef.current = null;
+      setSnapshot(null);
+      setDebugError(null);
+    }
+  }, [code, mode]);
 
   function ensureEngine(): SequenceEngine {
     if (!ctxRef.current) {
@@ -42,15 +71,17 @@ function App() {
     return engineRef.current!;
   }
 
+  // ---------------------------------------------------------------- play
+
   async function handlePlay() {
-    setError(null);
-    setStatus('loading');
+    setPlayError(null);
+    setPlayStatus('loading');
     try {
       await ensureWindyInitialized();
       const events = traceProgram(code);
       if (events.length === 0) {
-        setError('실행 가능한 instruction이 없습니다 — 코드를 확인하세요.');
-        setStatus('error');
+        setPlayError('실행 가능한 instruction이 없습니다 — 코드를 확인하세요.');
+        setPlayStatus('error');
         return;
       }
       const engine = ensureEngine();
@@ -59,13 +90,63 @@ function App() {
       engine.play(events);
 
       const totalSec = events.length * (60 / bpm) + 0.5;
-      setInfo({ events: events.length, durationSec: totalSec });
-      setStatus('playing');
-      window.setTimeout(() => setStatus('idle'), totalSec * 1000);
+      setPlayInfo({ events: events.length, durationSec: totalSec });
+      setPlayStatus('playing');
+      window.setTimeout(() => setPlayStatus('idle'), totalSec * 1000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus('error');
+      setPlayError(e instanceof Error ? e.message : String(e));
+      setPlayStatus('error');
     }
+  }
+
+  // --------------------------------------------------------------- debug
+
+  async function startDebug() {
+    setDebugError(null);
+    try {
+      await ensureWindyInitialized();
+      ensureEngine(); // audio 컨텍스트만 보장 (resume은 step에서)
+      debuggerRef.current?.free();
+      const dbg = new WindyDebugger(code);
+      debuggerRef.current = dbg;
+      setSnapshot(dbg.getSnapshot());
+    } catch (e) {
+      setDebugError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function stepOnce() {
+    const dbg = debuggerRef.current;
+    if (!dbg) return;
+    const engine = ensureEngine();
+    await engine.resume();
+
+    // 현재 보이는 opcode를 sonify → 그 다음 step
+    const ev = dbg.currentEvent();
+    if (ev) engine.playImmediate(ev);
+    dbg.step();
+    setSnapshot(dbg.getSnapshot());
+  }
+
+  async function continueRun() {
+    const dbg = debuggerRef.current;
+    if (!dbg) return;
+    const engine = ensureEngine();
+    engine.setBpm(bpm);
+    await engine.resume();
+
+    const remaining = dbg.collectRemaining();
+    if (remaining.length > 0) {
+      engine.play(remaining);
+    }
+    setSnapshot(dbg.getSnapshot());
+  }
+
+  function resetDebug() {
+    debuggerRef.current?.free();
+    debuggerRef.current = null;
+    setSnapshot(null);
+    setDebugError(null);
   }
 
   function loadExample(key: string) {
@@ -73,8 +154,10 @@ function App() {
     if (program) setCode(program);
   }
 
-  const playing = status === 'playing';
-  const loading = status === 'loading';
+  const playing = playStatus === 'playing';
+  const loading = playStatus === 'loading';
+  const debugStarted = snapshot !== null;
+  const debugDone = snapshot !== null && (snapshot.halted || snapshot.trapped);
 
   return (
     <div className="app">
@@ -88,6 +171,24 @@ function App() {
       <main>
         <section className="panel">
           <div className="row toolbar">
+            <div className="mode-toggle" role="tablist">
+              <button
+                role="tab"
+                aria-selected={mode === 'play'}
+                className={mode === 'play' ? 'active' : ''}
+                onClick={() => setMode('play')}
+              >
+                ▶ Play
+              </button>
+              <button
+                role="tab"
+                aria-selected={mode === 'debug'}
+                className={mode === 'debug' ? 'active' : ''}
+                onClick={() => setMode('debug')}
+              >
+                ⏸ Debug
+              </button>
+            </div>
             <label>
               BPM
               <input
@@ -99,9 +200,6 @@ function App() {
                 disabled={loading || playing}
               />
             </label>
-            <button onClick={handlePlay} disabled={loading || playing}>
-              {playing ? '▶ 재생 중' : loading ? '준비 중…' : '▶ 재생'}
-            </button>
             <span className="example-list">
               예제:{' '}
               {Object.keys(EXAMPLES).map((key) => (
@@ -116,6 +214,7 @@ function App() {
               ))}
             </span>
           </div>
+
           <textarea
             className="code"
             value={code}
@@ -123,19 +222,67 @@ function App() {
             spellCheck={false}
             rows={10}
           />
-          <div className="status">
-            {error && <span className="error">에러: {error}</span>}
-            {!error && info && (
-              <span>
-                {info.events} instruction · {info.durationSec.toFixed(1)}초
-              </span>
-            )}
-            {!error && !info && (
-              <span className="hint">
-                windy-lang 코드를 입력하고 재생을 누르세요. 예제를 선택해도 됩니다.
-              </span>
-            )}
-          </div>
+
+          {mode === 'play' && (
+            <>
+              <div className="row" style={{ marginTop: '0.6rem' }}>
+                <button onClick={handlePlay} disabled={loading || playing}>
+                  {playing ? '▶ 재생 중' : loading ? '준비 중…' : '▶ 재생'}
+                </button>
+              </div>
+              <div className="status">
+                {playError && <span className="error">에러: {playError}</span>}
+                {!playError && playInfo && (
+                  <span>
+                    {playInfo.events} instruction · {playInfo.durationSec.toFixed(1)}초
+                  </span>
+                )}
+                {!playError && !playInfo && (
+                  <span className="hint">windy-lang 코드를 입력하고 재생을 누르세요.</span>
+                )}
+              </div>
+            </>
+          )}
+
+          {mode === 'debug' && (
+            <>
+              <div className="row" style={{ marginTop: '0.6rem' }}>
+                {!debugStarted && (
+                  <button onClick={startDebug}>⏵ 디버그 시작</button>
+                )}
+                {debugStarted && (
+                  <>
+                    <button onClick={stepOnce} disabled={debugDone}>
+                      ▷ Step
+                    </button>
+                    <button onClick={continueRun} disabled={debugDone}>
+                      ▶▶ Continue
+                    </button>
+                    <button onClick={resetDebug} className="secondary">
+                      ↺ Reset
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="status">
+                {debugError && <span className="error">에러: {debugError}</span>}
+                {!debugError && !debugStarted && (
+                  <span className="hint">
+                    "디버그 시작"으로 세션을 만들면 한 step씩 진행하며 매 instruction의 소리를 들을 수
+                    있습니다.
+                  </span>
+                )}
+                {!debugError && debugDone && (
+                  <span>
+                    {snapshot.halted ? '✓ 정상 종료 (halted)' : '⚠ 트랩 (trapped)'} · 총{' '}
+                    {snapshot.stepCount} step
+                  </span>
+                )}
+              </div>
+
+              {debugStarted && <DebugPanel snap={snapshot} />}
+            </>
+          )}
         </section>
 
         <section className="panel">
@@ -167,6 +314,65 @@ function App() {
       </footer>
     </div>
   );
+}
+
+function DebugPanel({ snap }: { snap: DebugSnapshot }) {
+  const dirArrow = arrowFor(snap.direction.dx, snap.direction.dy);
+  return (
+    <div className="debug-panel">
+      <div className="debug-grid">
+        <Field label="step">{snap.stepCount}</Field>
+        <Field label="op">
+          <code>{snap.currentOpName}</code>
+        </Field>
+        <Field label="pos">
+          ({snap.position.x}, {snap.position.y})
+        </Field>
+        <Field label="dir">
+          {dirArrow} ({snap.direction.dx}, {snap.direction.dy})
+        </Field>
+        <Field label="ips">{snap.ipCount}</Field>
+        <Field label="state">
+          {snap.halted ? 'halted' : snap.trapped ? 'trapped' : 'running'}
+        </Field>
+      </div>
+      <Field label="stack (bottom → top)">
+        <code>{snap.stack.length === 0 ? '∅' : snap.stack.join(' · ')}</code>
+      </Field>
+      {snap.stdout && (
+        <Field label="stdout">
+          <pre className="output">{snap.stdout}</pre>
+        </Field>
+      )}
+      {snap.stderr && (
+        <Field label="stderr">
+          <pre className="output dim">{snap.stderr}</pre>
+        </Field>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <span className="field-value">{children}</span>
+    </div>
+  );
+}
+
+function arrowFor(dx: number, dy: number): string {
+  // dy: +1 = south, -1 = north (SPEC §3.1)
+  if (dx === 1 && dy === 0) return '→';
+  if (dx === 1 && dy === -1) return '↗';
+  if (dx === 0 && dy === -1) return '↑';
+  if (dx === -1 && dy === -1) return '↖';
+  if (dx === -1 && dy === 0) return '←';
+  if (dx === -1 && dy === 1) return '↙';
+  if (dx === 0 && dy === 1) return '↓';
+  if (dx === 1 && dy === 1) return '↘';
+  return '·';
 }
 
 export default App;

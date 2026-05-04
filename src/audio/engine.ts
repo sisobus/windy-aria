@@ -32,18 +32,31 @@ export class SequenceEngine {
 
   /**
    * 시퀀스를 즉시 시작 — 현재 audioContext.currentTime + 100ms부터.
+   * 첫 이벤트의 tick을 0점으로 정규화하므로 절대 tick 값과 무관하게 동작.
    */
   play(events: InstructionEvent[]): void {
     if (events.length === 0) return;
     const tickDur = this.tickDuration;
     const startAt = this.ctx.currentTime + 0.1;
+    const baseTick = events[0]!.tick;
 
     for (const event of events) {
-      const when = startAt + event.tick * tickDur;
+      const when = startAt + (event.tick - baseTick) * tickDur;
       const sounds = mapInstruction(event, when);
       for (const sound of sounds) {
         this.synth.schedule(sound);
       }
+    }
+  }
+
+  /**
+   * 한 발만 즉시 재생 — 디버그 모드의 step 버튼용.
+   */
+  playImmediate(event: InstructionEvent): void {
+    const when = this.ctx.currentTime + 0.005;
+    const sounds = mapInstruction(event, when);
+    for (const sound of sounds) {
+      this.synth.schedule(sound);
     }
   }
 

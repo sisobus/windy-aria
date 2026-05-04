@@ -93,45 +93,131 @@ export interface RunOptions {
 }
 
 /**
+ * 디버거에서 사용하는, 현재 시점의 인터프리터 상태 스냅샷.
+ */
+export interface DebugSnapshot {
+  /** 누적 step 수 (= tick 수) */
+  stepCount: number;
+  /** 현재 IP가 가리키는 셀의 opcode 이름 ("MOVE_E", "PUSH_DIGIT (5)" 등) */
+  currentOpName: string;
+  /** 파싱된 opcode (UNKNOWN/공백이면 null) */
+  currentEvent: InstructionEvent | null;
+  /** primary IP 위치 */
+  position: { x: number; y: number };
+  /** primary IP 진행방향 */
+  direction: { dx: number; dy: number };
+  /** primary IP 스택 (bottom → top) */
+  stack: string[];
+  /** 살아있는 IP 수 */
+  ipCount: number;
+  halted: boolean;
+  trapped: boolean;
+  /** 누적 stdout */
+  stdout: string;
+  /** 누적 stderr (sisobus 배너 + warning) */
+  stderr: string;
+}
+
+/**
  * windy 프로그램을 실행하면서 InstructionEvent 스트림을 만든다.
- *
- * 동기 함수지만 정해진 maxSteps 안에서 끝나도록 보장. 1000+ tick 프로그램은
- * 사실상 음악으로 의미 없으니 default는 2000.
+ * Play 모드용. 한 번 호출에 한 번 sonification 시퀀스 생성.
  */
 export function traceProgram(source: string, options: RunOptions = {}): InstructionEvent[] {
-  const maxSteps = options.maxSteps ?? BigInt(5000);
-  const maxEvents = options.maxEvents ?? 2000;
-  const session = new Session(source, '', options.seed ?? null, maxSteps);
-
-  const events: InstructionEvent[] = [];
-  let tick = 0;
-
-  while (!session.halted && !session.trapped && events.length < maxEvents) {
-    const opName = session.current_op();
-    const x = Number(session.ip_x);
-    const y = Number(session.ip_y);
-
-    const parsed = parseOpName(opName);
-    if (parsed) {
-      events.push({
-        opcode: parsed.opcode,
-        digit: parsed.digit,
-        position: { x, y },
-        ipId: 0,
-        tick,
-      });
-    }
-
-    session.step();
-    tick++;
-  }
-
-  // 자원 해제 — Symbol.dispose가 wasm-bindgen에서 노출됨
-  try {
-    session.free();
-  } catch {
-    // ignore
-  }
-
+  const dbg = new WindyDebugger(source, options);
+  const events = dbg.collectRemaining(options.maxEvents);
+  dbg.free();
   return events;
+}
+
+/**
+ * 디버그 모드용 Session 래퍼.
+ *
+ * step()마다 현재 opcode를 InstructionEvent로 노출하고, getSnapshot()으로
+ * UI에 보여줄 전체 상태를 한 번에 가져온다. 자원 관리(free)는 호출자 책임.
+ */
+export class WindyDebugger {
+  private session: Session;
+  private maxEvents: number;
+
+  constructor(source: string, options: RunOptions = {}) {
+    const maxSteps = options.maxSteps ?? BigInt(5000);
+    this.session = new Session(source, '', options.seed ?? null, maxSteps);
+    this.maxEvents = options.maxEvents ?? 2000;
+  }
+
+  /**
+   * 다음에 실행될 instruction을 InstructionEvent로 변환해서 돌려준다.
+   * UNKNOWN/strmode-while-not-quote의 경우 null.
+   */
+  currentEvent(): InstructionEvent | null {
+    const opName = this.session.current_op();
+    const parsed = parseOpName(opName);
+    if (!parsed) return null;
+    return {
+      opcode: parsed.opcode,
+      digit: parsed.digit,
+      position: {
+        x: Number(this.session.ip_x),
+        y: Number(this.session.ip_y),
+      },
+      ipId: 0,
+      tick: this.stepCount,
+    };
+  }
+
+  /** 한 tick 진행. halted/trapped면 무시. */
+  step(): void {
+    if (this.session.halted || this.session.trapped) return;
+    this.session.step();
+  }
+
+  /**
+   * 현재 위치부터 halted/trapped 또는 maxEvents까지 진행하며 모든
+   * InstructionEvent를 수집. step counter는 누적되므로 tick 값은
+   * 절대값으로 반환된다 (engine.play가 알아서 정규화).
+   */
+  collectRemaining(maxEvents?: number): InstructionEvent[] {
+    const cap = maxEvents ?? this.maxEvents;
+    const out: InstructionEvent[] = [];
+    while (!this.session.halted && !this.session.trapped && out.length < cap) {
+      const ev = this.currentEvent();
+      if (ev) out.push(ev);
+      this.session.step();
+    }
+    return out;
+  }
+
+  getSnapshot(): DebugSnapshot {
+    return {
+      stepCount: this.stepCount,
+      currentOpName: this.session.current_op(),
+      currentEvent: this.currentEvent(),
+      position: {
+        x: Number(this.session.ip_x),
+        y: Number(this.session.ip_y),
+      },
+      direction: {
+        dx: Number(this.session.dx),
+        dy: Number(this.session.dy),
+      },
+      stack: this.session.stack(),
+      ipCount: this.session.ip_count,
+      halted: this.session.halted,
+      trapped: this.session.trapped,
+      stdout: this.session.stdout(),
+      stderr: this.session.stderr(),
+    };
+  }
+
+  get stepCount(): number {
+    return Number(this.session.steps);
+  }
+
+  free(): void {
+    try {
+      this.session.free();
+    } catch {
+      // ignore
+    }
+  }
 }
