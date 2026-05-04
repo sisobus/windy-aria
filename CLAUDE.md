@@ -49,11 +49,27 @@ windy-lang core에 instruction 실행 이벤트 hook을 추가해야 한다. 이
 
 ## 기술 스택
 
-- **언어**: TypeScript
+모든 의존성은 **최신 버전** 사용 정책. lockfile에 메이저 버전 고정, 마이너·패치는 dependabot 또는 수동 업데이트로 따라간다.
+
+- **패키지 매니저**: pnpm (최신)
+- **런타임**: Node.js 최신 LTS
+- **언어**: TypeScript (최신)
+- **번들러**: Vite (최신)
+- **UI 프레임워크**: React 19 (최신)
 - **오디오**: Web Audio API (사인/사각/삼각/톱니파 + ADSR + 단순 필터). 외부 오디오 라이브러리 최소화
-- **UI**: Vite + Solid 또는 Vanilla TS (번들 크기 우선, React 안 씀)
 - **windy-lang 의존**: npm 패키지 또는 git submodule 형태로 wasm artifact 참조
 - **배포**: GitHub Pages 또는 windy.sisobus.com 하위 경로
+
+### 프레임워크 결정 기록
+
+**Next.js 검토 후 Vite + React SPA 채택**. 이유:
+
+- Frontend-only thesis상 SSR/서버 라우팅 불필요
+- 단일 페이지 앱에 가까움 (에디터·플레이어·갤러리 모두 한 화면 또는 단순 라우팅)
+- 정적 export로 GitHub Pages 직배포 가능
+- 번들 크기 우선 (1MB 미만 목표 + windy-lang wasm)
+
+향후 SSR이 필요한 시점이 오면 (예: 갤러리 SEO 강화) Next.js로 마이그레이션 검토.
 
 ## 풍향 → 사운드 매핑 (초안)
 
