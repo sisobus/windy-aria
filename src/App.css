@@ -113,6 +113,18 @@ main {
   filter: none;
 }
 
+.link-btn.dice {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  margin-left: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.link-btn.dice:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
 .code {
   width: 100%;
   background: rgba(0, 0, 0, 0.4);

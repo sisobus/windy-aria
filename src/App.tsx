@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SequenceEngine } from './audio/engine.ts';
+import { generateRandomProgram } from './generator/random.ts';
 import {
   WindyDebugger,
   ensureWindyInitialized,
@@ -154,6 +155,10 @@ function App() {
     if (program) setCode(program);
   }
 
+  function rollRandom() {
+    setCode(generateRandomProgram());
+  }
+
   const playing = playStatus === 'playing';
   const loading = playStatus === 'loading';
   const debugStarted = snapshot !== null;
@@ -212,6 +217,14 @@ function App() {
                   {key}
                 </button>
               ))}
+              <button
+                className="link-btn dice"
+                onClick={rollRandom}
+                disabled={loading || playing}
+                title="2D 랜덤 windy 프로그램 생성"
+              >
+                🎲 random
+              </button>
             </span>
           </div>
 
