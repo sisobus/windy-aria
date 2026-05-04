@@ -8,11 +8,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "build:windy": "cd ../windy && wasm-pack build --target web --release --out-dir web/pkg",
+    "setup": "pnpm build:windy && pnpm install"
   },
   "dependencies": {
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "windy-lang": "file:../windy/web/pkg"
   },
   "devDependencies": {
     "@types/react": "latest",

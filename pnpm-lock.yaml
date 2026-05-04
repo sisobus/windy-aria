@@ -14,6 +14,9 @@ importers:
       react-dom:
         specifier: latest
         version: 19.2.5(react@19.2.5)
+      windy-lang:
+        specifier: file:../windy/web/pkg
+        version: file:../windy/web/pkg
     devDependencies:
       '@types/react':
         specifier: latest
@@ -363,6 +366,9 @@ packages:
       yaml:
         optional: true
 
+  windy-lang@file:../windy/web/pkg:
+    resolution: {directory: ../windy/web/pkg, type: directory}
+
 snapshots:
 
   '@emnapi/core@1.10.0':
@@ -584,3 +590,5 @@ snapshots:
       tinyglobby: 0.2.16
     optionalDependencies:
       fsevents: 2.3.3
+
+  windy-lang@file:../windy/web/pkg: {}

@@ -86,24 +86,29 @@ windy-lang core에 instruction 실행 이벤트 hook을 추가해야 한다. 이
 
 위는 임의 초안. v1 구현 시 windy-lang `SPEC.md`의 실제 instruction set을 정독한 뒤 매핑을 정밀화한다. 매핑은 별도 `docs/MAPPING.md` 문서로 분리해 버전 관리한다.
 
-## 프로젝트 구조 (계획)
+## 프로젝트 구조
 
 ```
 windy-aria/
 ├── src/
-│   ├── interpreter/      # windy-lang 통합 (이벤트 구독)
-│   ├── audio/            # 사운드 매핑 + Web Audio 합성기
-│   ├── visualizer/       # 2D 커서 애니메이션
-│   ├── export/           # WAV 인코딩, 공유 URL
-│   └── ui/               # 에디터·트랜스포트·갤러리
-├── public/
-│   └── songs/            # 큐레이션 .wnd 곡 모음
+│   ├── interpreter/
+│   │   └── windy.ts       # Session API step-by-step → InstructionEvent
+│   ├── audio/
+│   │   ├── synth.ts       # Web Audio 합성기 (osc + ADSR + noise + gliss)
+│   │   ├── mapping.ts     # Opcode → SoundEvent
+│   │   └── engine.ts      # 시퀀스 스케줄러 (BPM 기반)
+│   ├── types.ts           # 35 opcode 타입 + 이벤트 타입
+│   ├── App.tsx            # 메인 UI (코드 에디터 + Play)
+│   └── main.tsx
 ├── docs/
-│   ├── MAPPING.md        # 풍향 → 사운드 매핑 명세
-│   └── ARCHITECTURE.md   # 인터프리터 통합 상세
-├── tests/
-└── README.md
+│   └── MAPPING.md         # 풍향 → 사운드 매핑 v1 명세
+├── index.html
+├── package.json
+├── tsconfig*.json
+└── vite.config.ts
 ```
+
+향후 추가 예정: `src/visualizer/` (2D 커서 애니메이션), `src/export/` (WAV/공유 URL), `public/songs/` (갤러리), `tests/`.
 
 ## 개발 규칙
 
@@ -115,7 +120,41 @@ windy-aria/
 
 ## 빌드 및 실행
 
-(v1 셋업 후 작성)
+### 사전 조건
+
+- Node.js LTS, pnpm
+- Rust toolchain + wasm-pack (windy-lang wasm 빌드용)
+- 워크스페이스에 자매 repo `../windy`가 함께 체크아웃되어 있어야 함 (sisobus-workspace를 `--recursive`로 클론)
+
+### 첫 셋업
+
+```bash
+pnpm setup       # ../windy를 wasm-pack으로 빌드 + 의존성 설치
+pnpm dev         # 개발 서버 (http://localhost:5173)
+```
+
+`pnpm setup`은 다음을 한 번에 실행한다:
+1. `cd ../windy && wasm-pack build --target web --release --out-dir web/pkg`
+2. `pnpm install` (file:../windy/web/pkg 의존성을 windy-lang으로 링크)
+
+### 일상 명령
+
+```bash
+pnpm dev          # Vite dev (HMR + wasm 자동 번들링)
+pnpm build        # 정적 빌드 → dist/
+pnpm preview      # 빌드 결과 로컬 서빙
+pnpm typecheck    # tsc -b --noEmit
+pnpm build:windy  # ../windy만 다시 빌드 (windy SPEC 변경 시)
+```
+
+### windy-lang 의존성 모델
+
+`package.json`의 `windy-lang` 의존성은 `file:../windy/web/pkg`로 로컬 경로를 가리킨다. 즉:
+- 워크스페이스 컨벤션상 windy-aria는 sisobus-workspace의 submodule이며, 자매 windy submodule이 같은 레벨에 있다고 가정
+- windy SPEC가 바뀌면 `pnpm build:windy`로 wasm 재빌드, 자동으로 모든 사용처에 반영
+- 외부 사용자에게 npm 패키지로 배포하려면 windy-lang을 npmjs에 publish 후 `npm` 의존성으로 전환
+
+향후 windy-lang npm publish가 끝나면 이 file 의존성을 정식 버전 의존성으로 교체할 수 있다.
 
 ## 배포
 

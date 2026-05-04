@@ -83,6 +83,82 @@ main {
   border-color: #7dd3fc;
 }
 
+.toolbar {
+  margin-bottom: 0.85rem;
+}
+
+.example-list {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.8rem;
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.link-btn {
+  background: transparent;
+  color: #7dd3fc;
+  border: none;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  font-weight: 400;
+}
+
+.link-btn:hover:not(:disabled) {
+  background: rgba(125, 211, 252, 0.12);
+  filter: none;
+}
+
+.code {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 0.75rem 1rem;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 4;
+}
+
+.code:focus {
+  outline: none;
+  border-color: #7dd3fc;
+}
+
+.status {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+  min-height: 1.2em;
+}
+
+.status .error {
+  color: #fca5a5;
+}
+
+.panel a {
+  color: #7dd3fc;
+  text-decoration: none;
+}
+
+.panel a:hover {
+  border-bottom: 1px solid #7dd3fc;
+}
+
+.sep {
+  color: rgba(255, 255, 255, 0.25);
+  margin: 0 0.4rem;
+}
+
 button {
   padding: 0.55rem 1.1rem;
   background: #7dd3fc;
