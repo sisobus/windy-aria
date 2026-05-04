@@ -1,0 +1,24 @@
+{
+  "name": "windy-aria",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "windy-lang 코드를 음악으로 출력하는 sonification 도구",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
