@@ -344,6 +344,8 @@ function App() {
       </main>
 
       <footer>
+        <a href="https://windy.sisobus.com/">windy.sisobus.com</a>
+        <span className="sep"> · </span>
         <a href="https://github.com/sisobus/windy-aria" target="_blank" rel="noreferrer">
           github.com/sisobus/windy-aria
         </a>
