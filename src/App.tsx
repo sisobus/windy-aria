@@ -6,7 +6,10 @@ import {
   ensureWindyInitialized,
   traceProgram,
   type DebugSnapshot,
+  type IpState,
+  type TickFrame,
 } from './interpreter/windy.ts';
+import { Grid } from './visualizer/Grid.tsx';
 import './App.css';
 
 // Bundle windy/examples/*.wnd as raw strings at build time. Run
@@ -53,6 +56,12 @@ function App() {
   const [snapshot, setSnapshot] = useState<DebugSnapshot | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
 
+  // visualizer state — drives the IP highlights on the grid below the editor.
+  // Play mode fills this from the trace's TickFrames via rAF; debug mode
+  // mirrors snapshot.ips on every step.
+  const [visIps, setVisIps] = useState<IpState[]>([]);
+  const rafRef = useRef<number | null>(null);
+
   const ctxRef = useRef<AudioContext | null>(null);
   const engineRef = useRef<SequenceEngine | null>(null);
 
@@ -61,10 +70,20 @@ function App() {
     return () => {
       debuggerRef.current?.free();
       debuggerRef.current = null;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
-  // Invalidate the debug session whenever code or mode changes.
+  function stopVisualizer() {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  // Invalidate the debug session AND any running play-mode animation
+  // whenever code or mode changes — old IP positions don't apply to a
+  // new program, and the audio is only scheduled once.
   useEffect(() => {
     if (debuggerRef.current) {
       debuggerRef.current.free();
@@ -72,6 +91,8 @@ function App() {
       setSnapshot(null);
       setDebugError(null);
     }
+    stopVisualizer();
+    setVisIps([]);
   }, [code, mode]);
 
   function ensureEngine(): SequenceEngine {
@@ -108,7 +129,15 @@ function App() {
       const engine = ensureEngine();
       engine.setBpm(bpm);
       await engine.resume();
+
+      // Mirror the engine's startAt offset (engine.play uses
+      // ctx.currentTime + 0.1 internally). The microsecond drift between
+      // the two reads is below visual resolution.
+      const ctx = ctxRef.current!;
+      const startAt = ctx.currentTime + 0.1;
       engine.play(result.events);
+
+      startPlayVisualizer(result.frames, startAt, result.events[0]!.tick);
 
       const totalSec = result.events.length * (60 / bpm) + 0.5;
       setPlayInfo({
@@ -125,6 +154,58 @@ function App() {
     }
   }
 
+  /**
+   * Drive the visualizer from the audio clock. We poll
+   * ctx.currentTime inside requestAnimationFrame and pick the frame
+   * whose tick window contains it, so highlight movement stays locked
+   * to actual playback even if the rAF cadence stutters.
+   */
+  /**
+   * @param audioBaseTick The tick value the engine is treating as its
+   *   t=0 (= `events[0].tick`). Frames whose tick is before this run
+   *   during the engine's leading silence; we still display them so the
+   *   IP visibly walks through pre-sound cells.
+   */
+  function startPlayVisualizer(
+    frames: TickFrame[],
+    startAt: number,
+    audioBaseTick: number,
+  ) {
+    stopVisualizer();
+    if (frames.length === 0) {
+      setVisIps([]);
+      return;
+    }
+    const tickDur = 60 / bpm;
+    const offset = audioBaseTick - frames[0]!.tick; // frames per leading silence
+    setVisIps(frames[0]!.ips);
+    let lastIdx = 0;
+
+    const tick = () => {
+      const ctx = ctxRef.current;
+      if (!ctx) {
+        rafRef.current = null;
+        return;
+      }
+      const elapsed = ctx.currentTime - startAt;
+      const rawIdx = Math.floor(elapsed / tickDur);
+      const idx = Math.min(Math.max(0, offset + rawIdx), frames.length - 1);
+      // Only re-render when the frame actually moves — rAF fires ~60 Hz
+      // but ticks at BPM 360 fire only ~6 Hz, so most rAF cycles don't
+      // have new state to commit.
+      if (idx !== lastIdx) {
+        lastIdx = idx;
+        setVisIps(frames[idx]!.ips);
+      }
+      if (idx >= frames.length - 1) {
+        rafRef.current = null;
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
   // --------------------------------------------------------------- debug
 
   async function startDebug() {
@@ -135,7 +216,9 @@ function App() {
       debuggerRef.current?.free();
       const dbg = new WindyDebugger(code);
       debuggerRef.current = dbg;
-      setSnapshot(dbg.getSnapshot());
+      const snap = dbg.getSnapshot();
+      setSnapshot(snap);
+      setVisIps(snap.ips);
     } catch (e) {
       setDebugError(e instanceof Error ? e.message : String(e));
     }
@@ -151,7 +234,9 @@ function App() {
     const ev = dbg.currentEvent();
     if (ev) engine.playImmediate(ev);
     dbg.step();
-    setSnapshot(dbg.getSnapshot());
+    const snap = dbg.getSnapshot();
+    setSnapshot(snap);
+    setVisIps(snap.ips);
   }
 
   async function continueRun() {
@@ -161,9 +246,19 @@ function App() {
     engine.setBpm(bpm);
     await engine.resume();
 
-    const remaining = dbg.collectRemaining();
-    if (remaining.length > 0) {
-      engine.play(remaining);
+    // Capture frames so we can animate the highlight through the
+    // remaining run, identically to handlePlay.
+    const ctx = ctxRef.current!;
+    const startAt = ctx.currentTime + 0.1;
+    const { events, frames } = dbg.collectRemainingWithFrames();
+    if (events.length > 0) {
+      engine.play(events);
+    }
+    if (frames.length > 0) {
+      // Audio base = first event's tick (engine.play normalizes to it),
+      // or fall back to the first frame's tick if no events fire.
+      const audioBaseTick = events[0]?.tick ?? frames[0]!.tick;
+      startPlayVisualizer(frames, startAt, audioBaseTick);
     }
     setSnapshot(dbg.getSnapshot());
   }
@@ -173,6 +268,8 @@ function App() {
     debuggerRef.current = null;
     setSnapshot(null);
     setDebugError(null);
+    stopVisualizer();
+    setVisIps([]);
   }
 
   function loadExample(key: string) {
@@ -260,6 +357,8 @@ function App() {
             spellCheck={false}
             rows={10}
           />
+
+          <Grid source={code} ips={visIps} />
 
           {mode === 'play' && (
             <>

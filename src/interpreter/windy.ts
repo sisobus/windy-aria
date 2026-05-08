@@ -8,11 +8,35 @@
  * v1 limitation: only the primary IP (the first when `ip_count > 0`)
  * is sonified. IPs spawned via SPLIT execute but don't produce a
  * separate voice. Multi-IP polyphony lands in v1.1 once windy-lang
- * exposes `current_op_for(ip_index)`.
+ * exposes `current_op_for(ip_index)`. The visualizer already renders
+ * every live IP via `ip_positions()`.
  */
 
 import init, { Session } from 'windy-lang';
 import type { InstructionEvent, Opcode } from '../types.ts';
+
+/**
+ * One live IP at a specific moment, in birth order.
+ */
+export interface IpState {
+  /** Birth-order index. IP 0 is the primary IP. */
+  id: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * Snapshot of every live IP at one tick — the raw material the
+ * visualizer animates over BPM-paced playback.
+ */
+export interface TickFrame {
+  /** Step count BEFORE this tick advances. */
+  tick: number;
+  /** All live IPs at this point, in birth order. */
+  ips: IpState[];
+}
 
 let initPromise: Promise<unknown> | null = null;
 
@@ -113,6 +137,8 @@ export interface DebugSnapshot {
   stack: string[];
   /** Number of live IPs. */
   ipCount: number;
+  /** All live IPs in birth order. The visualizer renders each. */
+  ips: IpState[];
   halted: boolean;
   trapped: boolean;
   /** Cumulative stdout. */
@@ -127,6 +153,12 @@ export interface DebugSnapshot {
  */
 export interface TraceResult {
   events: InstructionEvent[];
+  /**
+   * Per-tick IP positions. `frames[i]` is the state BEFORE step i; one
+   * extra terminal frame is appended with the post-halt state. Drives
+   * the visualizer animation.
+   */
+  frames: TickFrame[];
   /** Natural termination via @ or IP collision merge. */
   halted: boolean;
   /** Runtime trap (e.g. ≪ at speed 1). Earlier events are valid; nothing after. */
@@ -146,13 +178,14 @@ export interface TraceResult {
  */
 export function traceProgram(source: string, options: RunOptions = {}): TraceResult {
   const dbg = new WindyDebugger(source, options);
-  const events = dbg.collectRemaining(options.maxEvents);
+  const { events, frames } = dbg.collectRemainingWithFrames(options.maxEvents);
   const halted = dbg.halted;
   const trapped = dbg.trapped;
   const stepCount = dbg.stepCount;
   dbg.free();
   return {
     events,
+    frames,
     halted,
     trapped,
     capReached: !halted && !trapped,
@@ -215,20 +248,58 @@ export class WindyDebugger {
   }
 
   /**
+   * Snapshot every live IP. Backed by `Session.ip_positions()`, which
+   * returns a flat (x, y, dx, dy) BigInt64Array of length `4 * ip_count`
+   * in birth order.
+   */
+  getAllIps(): IpState[] {
+    const flat = this.session.ip_positions();
+    const ips: IpState[] = [];
+    for (let i = 0; i + 3 < flat.length; i += 4) {
+      ips.push({
+        id: i / 4,
+        x: Number(flat[i]!),
+        y: Number(flat[i + 1]!),
+        dx: Number(flat[i + 2]!),
+        dy: Number(flat[i + 3]!),
+      });
+    }
+    return ips;
+  }
+
+  /**
    * Run forward from the current position until halted/trapped or
    * maxEvents, collecting every InstructionEvent. The step counter is
    * cumulative, so tick values are returned absolute — engine.play
    * normalizes them.
    */
   collectRemaining(maxEvents?: number): InstructionEvent[] {
+    return this.collectRemainingWithFrames(maxEvents).events;
+  }
+
+  /**
+   * Same trace as collectRemaining, but also captures one TickFrame
+   * per step (pre-step state) plus a terminal frame after the loop
+   * exits. Lets the visualizer animate through every IP transition,
+   * not just the ones that emit a sound.
+   */
+  collectRemainingWithFrames(maxEvents?: number): {
+    events: InstructionEvent[];
+    frames: TickFrame[];
+  } {
     const cap = maxEvents ?? this.maxEvents;
-    const out: InstructionEvent[] = [];
-    while (!this.session.halted && !this.session.trapped && out.length < cap) {
+    const events: InstructionEvent[] = [];
+    const frames: TickFrame[] = [];
+    while (!this.session.halted && !this.session.trapped && events.length < cap) {
+      frames.push({ tick: this.stepCount, ips: this.getAllIps() });
       const ev = this.currentEvent();
-      if (ev) out.push(ev);
+      if (ev) events.push(ev);
       this.session.step();
     }
-    return out;
+    // Final frame: post-halt / post-cap state, so the visualizer can
+    // land on something other than the last pre-step position.
+    frames.push({ tick: this.stepCount, ips: this.getAllIps() });
+    return { events, frames };
   }
 
   getSnapshot(): DebugSnapshot {
@@ -246,6 +317,7 @@ export class WindyDebugger {
       },
       stack: this.session.stack(),
       ipCount: this.session.ip_count,
+      ips: this.getAllIps(),
       halted: this.session.halted,
       trapped: this.session.trapped,
       stdout: this.session.stdout(),

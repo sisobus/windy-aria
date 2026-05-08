@@ -146,6 +146,66 @@ main {
   border-color: #7dd3fc;
 }
 
+/*
+ * Visualizer — monospace cell grid mirroring the editor textarea.
+ * Cells share the .code font/size/line-height so that "row N column M
+ * in the editor" lines up with "row N column M in the grid". Width is
+ * cell-driven (1ch per cell), so wide rows scroll horizontally.
+ */
+.visualizer {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+  overflow-x: auto;
+  white-space: pre;
+  /* Min height so an empty/blank source still has visible bounds. */
+  min-height: 1.5em;
+}
+
+.vis-row {
+  display: flex;
+  flex-wrap: nowrap;
+  /* Empty rows still occupy one line height so the y-axis stays
+     aligned with the source. */
+  min-height: 1.5em;
+}
+
+.vis-cell {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  border-radius: 2px;
+  /* Animate the highlight movement so a fast IP doesn't strobe. */
+  transition:
+    background 80ms ease-out,
+    color 80ms ease-out;
+}
+
+.vis-cell.active {
+  color: #0a0e1a;
+  font-weight: 600;
+  /* Glow underneath so a bright cell pops over the dark panel. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+@media (prefers-color-scheme: light) {
+  .visualizer {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: rgba(0, 0, 0, 0.82);
+  }
+  .vis-cell.active {
+    color: #0a0e1a;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  }
+}
+
 .status {
   margin-top: 0.6rem;
   font-size: 0.82rem;
