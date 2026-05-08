@@ -5,12 +5,13 @@ import { mapInstruction } from './mapping.ts';
 /**
  * Sequence engine.
  *
- * windy-lang 인터프리터에서 흘러나온 InstructionEvent 스트림을 BPM에 맞춰
- * Web Audio 시각으로 옮긴다.
+ * Converts the InstructionEvent stream from the windy-lang interpreter
+ * into Web Audio scheduling, paced by BPM.
  *
- * BPM 모델: 한 tick = (60 / bpm) 초. SPEC §3.6의 main-loop tick과 1:1.
- * 한 tick 안에 다중 IP가 있으면 같은 when에 여러 SoundEvent가 예약되어
- * 자연스럽게 폴리포니로 합성된다 (v1.1 multi-IP 통합 시).
+ * BPM model: one tick = (60 / bpm) seconds. 1:1 with the main-loop tick
+ * in SPEC §3.6. When multiple IPs share a tick, multiple SoundEvents
+ * land on the same `when` and synthesize as natural polyphony (v1.1
+ * multi-IP integration).
  */
 export class SequenceEngine {
   private ctx: AudioContext;
@@ -31,8 +32,9 @@ export class SequenceEngine {
   }
 
   /**
-   * 시퀀스를 즉시 시작 — 현재 audioContext.currentTime + 100ms부터.
-   * 첫 이벤트의 tick을 0점으로 정규화하므로 절대 tick 값과 무관하게 동작.
+   * Start the sequence immediately — from audioContext.currentTime + 100ms.
+   * The first event's tick is normalized to t=0, so absolute tick values
+   * don't matter.
    */
   play(events: InstructionEvent[]): void {
     if (events.length === 0) return;
@@ -50,7 +52,7 @@ export class SequenceEngine {
   }
 
   /**
-   * 한 발만 즉시 재생 — 디버그 모드의 step 버튼용.
+   * Play a single event immediately — for the debug step button.
    */
   playImmediate(event: InstructionEvent): void {
     const when = this.ctx.currentTime + 0.005;
@@ -61,7 +63,8 @@ export class SequenceEngine {
   }
 
   /**
-   * 컨텍스트가 user gesture 후에야 resume 가능하므로, play 직전에 호출.
+   * The context can only resume after a user gesture — call this right
+   * before play.
    */
   async resume(): Promise<void> {
     if (this.ctx.state !== 'running') {

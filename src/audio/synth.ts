@@ -1,13 +1,14 @@
 import type { SoundEvent, Timbre } from '../types.ts';
 
 /**
- * 단순 Web Audio 합성기.
+ * Minimal Web Audio synth.
  *
- * - 오실레이터 4종 (sine/triangle/square/sawtooth) + noise (audio buffer)
- * - 짧은 ADSR (attack 5ms, decay→sustain none, release 변동)
- * - 글리산도(GUST/CALM)는 SoundEvent의 timbre가 'sine'이고
- *   주파수가 일반 풍향 영역 밖일 때 자동 처리 — v1은 단순화를 위해
- *   GUST/CALM만 frequency 200/800 매직 값으로 sweep 트리거.
+ * - 4 oscillator types (sine/triangle/square/sawtooth) + noise (audio buffer)
+ * - Short ADSR (5ms attack, no decay→sustain, variable release)
+ * - Glissando (GUST/CALM) is auto-detected when a SoundEvent has timbre
+ *   `sine` and a frequency outside the normal wind range. v1 keeps it
+ *   simple: only GUST/CALM use the magic 200/800 Hz values to trigger
+ *   sweeps.
  */
 
 let noiseBuffer: AudioBuffer | null = null;
@@ -47,8 +48,8 @@ export class Synth {
   }
 
   /**
-   * 단일 SoundEvent를 정확한 시각에 예약 재생한다.
-   * audioContext.currentTime을 기준으로 한 schedule.
+   * Schedule a single SoundEvent at the precise time on the audio
+   * context's clock.
    */
   schedule(event: SoundEvent): void {
     const { ctx } = this;
@@ -94,7 +95,7 @@ export class Synth {
     src.buffer = getNoiseBuffer(ctx);
     src.loop = true;
 
-    // 풍향 노이즈 — 약간의 밴드패스로 wind 느낌
+    // Wind noise — a gentle bandpass shapes it into something wind-like.
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.frequency.setValueAtTime(800, when);
@@ -127,7 +128,7 @@ function oscType(timbre: Timbre): OscillatorType {
     case 'sawtooth':
       return 'sawtooth';
     case 'noise':
-      // 노이즈는 별도 처리되어야 하지만 fallback
+      // Noise has its own scheduling path; this is just a fallback.
       return 'sawtooth';
   }
 }

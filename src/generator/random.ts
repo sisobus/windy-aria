@@ -1,37 +1,39 @@
 /**
- * 랜덤 windy 프로그램 생성기.
+ * Random windy program generator.
  *
- * 규칙 (입력 없음, 사이클 없음, 종료 보장):
- * 1. IP는 (0, 0)에서 east로 출발한다.
- * 2. 경로는 self-avoiding — 이미 방문한 셀로 되돌아가지 않는다.
- *    같은 셀에 두 번 다른 의도를 적을 수 없으므로 (덮어쓰기 모순).
- * 3. 비음수 사분면 (x ≥ 0, y ≥ 0) 안에서만 진행. (0, 0)이 렌더링된 그리드의 좌상단이
- *    되어야 IP가 우리 코드에 진입하기 때문.
- * 4. 코너(방향 전환) 셀은 그 방향의 wind opcode로 강제. 직선 셀은 방향 보존하는
- *    임의 opcode로 자유롭게 채움.
- * 5. 경로 끝에 `@` 배치 — 종료 보장.
+ * Invariants (no input, no cycles, halts):
+ * 1. The IP starts at (0, 0) heading east.
+ * 2. The path is self-avoiding — never revisits a cell. (Two visits
+ *    would conflict at write time: a cell can only carry one glyph.)
+ * 3. The path stays in the non-negative quadrant (x ≥ 0, y ≥ 0) so that
+ *    (0, 0) lands at the top-left of the rendered grid where the IP
+ *    actually enters the source.
+ * 4. Corner cells (direction changes) are forced to the wind opcode for
+ *    the new direction. Straight cells take any direction-preserving
+ *    opcode.
+ * 5. An `@` is placed at the end of the path — halt is guaranteed.
  *
- * 의도적으로 제외하는 opcode:
- * - `≫` `≪` (GUST/CALM): 속도 변경이 중간 셀 스킵을 만들어 우리 시뮬레이션과
- *   실제 IP 경로가 어긋남.
- * - `#` (TRAMPOLINE): 다음 셀 스킵 — 마찬가지로 경로 시뮬레이션 깨짐.
- * - `t` (SPLIT): 새 IP가 우리가 의도하지 않은 영역으로 감.
- * - `_` `|` (분기): 스택 값에 따라 방향 결정 — 예측 불가.
- * - `"` (STR_MODE): 문자열 모드 진입 시 후속 셀이 push로만 처리.
- * - `&` `?` (입력): stdin 없으니 -1 push, 음악적으로 의미 없음.
- * - `g` `p` (그리드 메모리): 셀 자체를 변조해 경로 깨질 수 있음.
- * - `@`: 우리가 끝에서 직접 배치.
+ * Opcodes intentionally excluded:
+ * - `≫` `≪` (GUST/CALM): speed changes skip cells, so our simulated
+ *   path drifts from the real IP's path.
+ * - `#` (TRAMPOLINE): same — skips the next cell.
+ * - `t` (SPLIT): the new IP would wander into territory we haven't laid out.
+ * - `_` `|` (branches): direction depends on the stack — unpredictable.
+ * - `"` (STR_MODE): once string mode opens, subsequent cells just push.
+ * - `&` `?` (input): no stdin → pushes -1, no musical signal.
+ * - `g` `p` (grid memory): can mutate the cells underfoot.
+ * - `@`: placed by us at the end.
  *
- * 직선 셀 선택지:
- * - 디지트 0–9 (가장 흔함, 음악의 척추)
- * - 산술 + - * / % ! `
- * - 스택 : $ \
- * - 출력 . , (스택이 비어도 0 출력 — 음 발생)
- * - TURBULENCE ~ (방향을 무작위로 바꾸지만 우리 generator는 시뮬할 수 없음
- *   → 직선용으로 부적합. 제외하거나 코너용으로만 한정)
- * - NOP (공백)
+ * Straight-cell pool:
+ * - Digits 0–9 (most common, the musical spine)
+ * - Arithmetic + - * / % ! `
+ * - Stack : $ \
+ * - Output . , (an empty stack still emits 0 — produces a note)
+ * - TURBULENCE ~ (random direction; our generator can't simulate it
+ *   → unsuitable for straights. Exclude or restrict to corners.)
+ * - NOP (space)
  *
- * TURBULENCE는 결정성이 깨지므로 generator에서 제외.
+ * TURBULENCE breaks determinism, so it stays out of the pool.
  */
 
 import type { Opcode } from '../types.ts';
@@ -66,10 +68,10 @@ function dirEqual(a: Dir, b: Dir): boolean {
   return a.dx === b.dx && a.dy === b.dy;
 }
 
-// 직선 셀에서 사용 가능한 글리프 풀. 가중치는 음악적 균형 — 디지트가 멜로디
-// 척추라 가장 무겁게, 텍스처는 가볍게.
+// Glyph pool used for straight cells. Weights tune the musical balance —
+// digits are the melodic spine (heaviest), textures stay light.
 const STRAIGHT_POOL: { glyph: string; weight: number }[] = [
-  // 디지트 (펜타토닉 C5–A6) — 50%
+  // Digits (pentatonic C5–A6) — 50%
   { glyph: '0', weight: 5 },
   { glyph: '1', weight: 5 },
   { glyph: '2', weight: 5 },
@@ -80,7 +82,7 @@ const STRAIGHT_POOL: { glyph: string; weight: number }[] = [
   { glyph: '7', weight: 5 },
   { glyph: '8', weight: 5 },
   { glyph: '9', weight: 5 },
-  // 산술 — 20%
+  // Arithmetic — 20%
   { glyph: '+', weight: 3 },
   { glyph: '-', weight: 3 },
   { glyph: '*', weight: 2 },
@@ -88,14 +90,14 @@ const STRAIGHT_POOL: { glyph: string; weight: number }[] = [
   { glyph: '%', weight: 2 },
   { glyph: '!', weight: 2 },
   { glyph: '`', weight: 2 },
-  // 스택 — 8%
+  // Stack — 8%
   { glyph: ':', weight: 2 },
   { glyph: '$', weight: 2 },
   { glyph: '\\', weight: 2 },
-  // 출력 — 7%
+  // Output — 7%
   { glyph: '.', weight: 2 },
   { glyph: ',', weight: 1 },
-  // NOP (호흡) — 15%
+  // NOP (breathing room) — 15%
   { glyph: ' ', weight: 8 },
 ];
 
@@ -114,20 +116,20 @@ function pickRandom<T>(arr: T[]): T {
 }
 
 export interface GenerateOptions {
-  /** 최소 경로 길이 (HALT 제외) */
+  /** Minimum path length (HALT excluded). */
   minLength?: number;
-  /** 최대 경로 길이 */
+  /** Maximum path length. */
   maxLength?: number;
-  /** 그리드 경계 (양쪽 정수 inclusive) */
+  /** Grid bounds (both inclusive). */
   maxX?: number;
   maxY?: number;
-  /** 직선 유지 확률 — 높을수록 단순한 경로 */
+  /** Straight-keeping probability — higher means simpler paths. */
   straightBias?: number;
 }
 
 /**
- * self-avoiding 2D walk + opcode 매칭 + HALT 종료.
- * 매번 다른 결과 (Math.random 기반).
+ * Self-avoiding 2D walk + opcode placement + terminating HALT.
+ * Different result every call (Math.random based).
  */
 export function generateRandomProgram(options: GenerateOptions = {}): string {
   const minLen = options.minLength ?? 16;
@@ -138,11 +140,11 @@ export function generateRandomProgram(options: GenerateOptions = {}): string {
 
   const targetLen = minLen + Math.floor(Math.random() * (maxLen - minLen + 1));
 
-  // === 1. 경로 생성 ===
+  // === 1. Build the path ===
   const path: Pos[] = [{ x: 0, y: 0 }];
   const visited = new Set<string>(['0,0']);
-  const dirsAfter: Dir[] = []; // dirsAfter[i] = 셀 i에서 i+1로 가는 방향
-  let lastDir: Dir = { dx: 1, dy: 0 }; // 시작 east
+  const dirsAfter: Dir[] = []; // dirsAfter[i] = direction from cell i to i+1
+  let lastDir: Dir = { dx: 1, dy: 0 }; // initial east
 
   while (path.length < targetLen) {
     const last = path[path.length - 1]!;
@@ -154,7 +156,7 @@ export function generateRandomProgram(options: GenerateOptions = {}): string {
       if (visited.has(`${next.x},${next.y}`)) continue;
       candidates.push(dir);
     }
-    if (candidates.length === 0) break; // 데드엔드 — 종료
+    if (candidates.length === 0) break; // dead end — stop
 
     let chosen: Dir;
     const canGoStraight = candidates.some((d) => dirEqual(d, lastDir));
@@ -171,9 +173,9 @@ export function generateRandomProgram(options: GenerateOptions = {}): string {
     lastDir = chosen;
   }
 
-  // === 2. 셀 채우기 ===
-  // dirIn[i] = 셀 i에 진입하는 방향 (initial east, 또는 dirsAfter[i-1])
-  // dirOut[i] = 셀 i에서 나가는 방향 (dirsAfter[i]) — 마지막 셀은 없음
+  // === 2. Fill the cells ===
+  // dirIn[i] = direction entering cell i (initial east, or dirsAfter[i-1])
+  // dirOut[i] = direction leaving cell i (dirsAfter[i]) — undefined for the last cell
   const cells = new Map<string, string>();
   const initialDir: Dir = { dx: 1, dy: 0 };
 
@@ -184,26 +186,28 @@ export function generateRandomProgram(options: GenerateOptions = {}): string {
 
     let glyph: string;
     if (dirOut !== undefined && !dirEqual(dirIn, dirOut)) {
-      // 코너 — wind opcode 강제
+      // Corner — force the wind opcode for the outgoing direction.
       glyph = dirGlyph(dirOut);
     } else {
-      // 직선 — 자유 선택
+      // Straight — pick freely from the pool.
       glyph = weightedPick(STRAIGHT_POOL).glyph;
     }
     cells.set(`${pos.x},${pos.y}`, glyph);
   }
 
-  // === 3. HALT 배치 ===
-  // 마지막 셀에서 IP가 다음에 갈 셀이 우리 path 밖. 거기에 @를 두면 IP가 도달해서 종료.
-  // 단, 그 다음 셀이 이미 visited면 path가 자기 자신을 만나지 않으므로 자유. 다만
-  // 그 셀이 그리드 경계 밖이면 path string 안에 안 담길 수도 있어 약간 곤란.
+  // === 3. Place HALT ===
+  // The IP's next cell after the last path cell is off our path. We
+  // could place `@` there and let the IP step into it, except that off
+  // the path (or off the grid) the cell may not appear in our rendered
+  // string at all.
   //
-  // 간단하게: path의 마지막 셀 자체를 @로 덮어쓴다. 마지막 셀은 어차피 sound 한 번
-  // 내고 끝나는 자리니까 HALT로 대체해도 음악적으로 자연 (저음 페이드).
+  // Simpler: overwrite the path's last cell with `@`. That cell would
+  // sound only once anyway, and HALT replacing it sounds natural — a
+  // low fade-out is a fine final note.
   const last = path[path.length - 1]!;
   cells.set(`${last.x},${last.y}`, '@');
 
-  // === 4. 그리드 렌더 ===
+  // === 4. Render the grid ===
   let boundX = 0;
   let boundY = 0;
   for (const pos of path) {
@@ -217,7 +221,7 @@ export function generateRandomProgram(options: GenerateOptions = {}): string {
     for (let x = 0; x <= boundX; x++) {
       line += cells.get(`${x},${y}`) ?? ' ';
     }
-    // trailing 공백 제거 — NOP이라 의미 같지만 깔끔하게
+    // Strip trailing whitespace — same meaning (NOP), but tidier output.
     lines.push(line.replace(/\s+$/, ''));
   }
   return lines.join('\n') + '\n';

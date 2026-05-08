@@ -1,12 +1,14 @@
 /**
- * windy-lang wasm 인터프리터 통합.
+ * windy-lang wasm interpreter integration.
  *
- * Session API를 step-by-step으로 돌리며 매 tick의 opcode를 InstructionEvent
- * 스트림으로 변환한다. SPEC v2.0 §3.6의 main-loop를 외부에서 driving하는 형태.
+ * Drives the Session API step by step, converting each tick's opcode
+ * into an InstructionEvent stream. This effectively externalizes the
+ * SPEC v2.0 §3.6 main loop.
  *
- * v1 한계: primary IP(`ip_count > 0`일 때 첫 번째)만 sonify한다. SPLIT으로
- * 분기된 IP는 실행은 되지만 별도 voice로 합성되진 않음. 다중 IP polyphony는
- * windy-lang 쪽에 `current_op_for(ip_index)` 추가 후 v1.1.
+ * v1 limitation: only the primary IP (the first when `ip_count > 0`)
+ * is sonified. IPs spawned via SPLIT execute but don't produce a
+ * separate voice. Multi-IP polyphony lands in v1.1 once windy-lang
+ * exposes `current_op_for(ip_index)`.
  */
 
 import init, { Session } from 'windy-lang';
@@ -60,12 +62,12 @@ const OPCODE_NAMES = new Set<Opcode>([
 ]);
 
 /**
- * windy의 `current_op()` 출력을 우리의 Opcode 타입으로 파싱.
+ * Parse windy's `current_op()` string into our Opcode type.
  *
- * 형식:
- * - "MOVE_E", "ADD", ... — 그대로
- * - "PUSH_DIGIT (5)" — 디지트 값 추출
- * - "UNKNOWN" — null 반환 (sonify 대상 아님)
+ * Format:
+ * - "MOVE_E", "ADD", ... — passthrough
+ * - "PUSH_DIGIT (5)" — extract the digit value
+ * - "UNKNOWN" — return null (not a sonify target)
  */
 function parseOpName(raw: string): { opcode: Opcode; digit?: number } | null {
   const match = raw.match(/^([A-Z_]+)(?:\s*\((\d+)\))?$/);
@@ -84,62 +86,63 @@ function parseOpName(raw: string): { opcode: Opcode; digit?: number } | null {
 }
 
 export interface RunOptions {
-  /** 실행 안전 한도 — IP가 무한 루프 도는 프로그램 보호 */
+  /** Hard step cap — guards against programs that don't halt. */
   maxSteps?: bigint;
-  /** TURBULENCE 결정성 */
+  /** Seed for TURBULENCE determinism. */
   seed?: bigint;
-  /** 스트림 가드 — 최대 emit 이벤트 수 */
+  /** Stream guard — maximum number of emitted events. */
   maxEvents?: number;
 }
 
 /**
- * 디버거에서 사용하는, 현재 시점의 인터프리터 상태 스냅샷.
+ * Snapshot of the interpreter state at one point in time, surfaced
+ * to the debug UI.
  */
 export interface DebugSnapshot {
-  /** 누적 step 수 (= tick 수) */
+  /** Cumulative step count (= tick count). */
   stepCount: number;
-  /** 현재 IP가 가리키는 셀의 opcode 이름 ("MOVE_E", "PUSH_DIGIT (5)" 등) */
+  /** Opcode name at the cell under the IP ("MOVE_E", "PUSH_DIGIT (5)", ...). */
   currentOpName: string;
-  /** 파싱된 opcode (UNKNOWN/공백이면 null) */
+  /** Parsed opcode (null for UNKNOWN/space). */
   currentEvent: InstructionEvent | null;
-  /** primary IP 위치 */
+  /** Primary IP position. */
   position: { x: number; y: number };
-  /** primary IP 진행방향 */
+  /** Primary IP direction. */
   direction: { dx: number; dy: number };
-  /** primary IP 스택 (bottom → top) */
+  /** Primary IP stack (bottom → top). */
   stack: string[];
-  /** 살아있는 IP 수 */
+  /** Number of live IPs. */
   ipCount: number;
   halted: boolean;
   trapped: boolean;
-  /** 누적 stdout */
+  /** Cumulative stdout. */
   stdout: string;
-  /** 누적 stderr (sisobus 배너 + warning) */
+  /** Cumulative stderr (sisobus banner + warnings). */
   stderr: string;
 }
 
 /**
- * traceProgram 결과. capReached가 true면 cap이 prematurely 끊은 것 —
- * 호출자는 무한 루프 가능성을 사용자에게 surface 해야 한다.
+ * traceProgram result. `capReached: true` means we cut the run short —
+ * the caller should surface the non-halting case to the user.
  */
 export interface TraceResult {
   events: InstructionEvent[];
-  /** @ 또는 IP 합병 등으로 자연 종료 */
+  /** Natural termination via @ or IP collision merge. */
   halted: boolean;
-  /** 런타임 트랩 (e.g. ≪ at speed 1) — 이전 이벤트는 유효, 이후는 없음 */
+  /** Runtime trap (e.g. ≪ at speed 1). Earlier events are valid; nothing after. */
   trapped: boolean;
-  /** maxSteps 또는 maxEvents 한계로 잘림 — 실제로는 종료하지 않는 코드 */
+  /** Cut by maxSteps or maxEvents — the program does not halt. */
   capReached: boolean;
-  /** 실제 진행한 tick 수 */
+  /** Tick count actually advanced. */
   stepCount: number;
 }
 
 /**
- * windy 프로그램을 실행하면서 InstructionEvent 스트림을 만든다.
- * Play 모드용. 한 번 호출에 한 번 sonification 시퀀스 생성.
+ * Execute a windy program and emit its InstructionEvent stream.
+ * Play mode — one call produces one sonification sequence.
  *
- * 실행이 cap에 막혀 잘렸는지 호출자가 알 수 있도록 halted/trapped/capReached
- * 플래그를 함께 돌려준다.
+ * Returns halted/trapped/capReached flags so the caller can tell whether
+ * the cap truncated the run.
  */
 export function traceProgram(source: string, options: RunOptions = {}): TraceResult {
   const dbg = new WindyDebugger(source, options);
@@ -158,18 +161,20 @@ export function traceProgram(source: string, options: RunOptions = {}): TraceRes
 }
 
 /**
- * 디버그 모드용 Session 래퍼.
+ * Session wrapper for debug mode.
  *
- * step()마다 현재 opcode를 InstructionEvent로 노출하고, getSnapshot()으로
- * UI에 보여줄 전체 상태를 한 번에 가져온다. 자원 관리(free)는 호출자 책임.
+ * Each step() exposes the current opcode as an InstructionEvent;
+ * getSnapshot() returns the full state for the UI in one go. Resource
+ * cleanup (free) is the caller's responsibility.
  */
 export class WindyDebugger {
   private session: Session;
   private maxEvents: number;
 
   constructor(source: string, options: RunOptions = {}) {
-    // 무한 드리프트 방지 — 한 IP가 grid 밖으로 나가도 SPEC상 grid는 무한해서
-    // 트랩 안 함. 4000 step / 500 event 캡이 60–90초 분량 sonification에 해당.
+    // Guard against infinite drift — an IP that walks off-grid never
+    // traps because the SPEC grid is infinite. The 4000-step / 500-event
+    // cap maps to roughly 60–90s of sonification at 360 BPM.
     const maxSteps = options.maxSteps ?? BigInt(4000);
     this.session = new Session(source, '', options.seed ?? null, maxSteps);
     this.maxEvents = options.maxEvents ?? 500;
@@ -184,8 +189,8 @@ export class WindyDebugger {
   }
 
   /**
-   * 다음에 실행될 instruction을 InstructionEvent로 변환해서 돌려준다.
-   * UNKNOWN/strmode-while-not-quote의 경우 null.
+   * Convert the next instruction to be executed into an InstructionEvent.
+   * Returns null for UNKNOWN cells or strmode-while-not-quote.
    */
   currentEvent(): InstructionEvent | null {
     const opName = this.session.current_op();
@@ -203,16 +208,17 @@ export class WindyDebugger {
     };
   }
 
-  /** 한 tick 진행. halted/trapped면 무시. */
+  /** Advance one tick. No-op if halted/trapped. */
   step(): void {
     if (this.session.halted || this.session.trapped) return;
     this.session.step();
   }
 
   /**
-   * 현재 위치부터 halted/trapped 또는 maxEvents까지 진행하며 모든
-   * InstructionEvent를 수집. step counter는 누적되므로 tick 값은
-   * 절대값으로 반환된다 (engine.play가 알아서 정규화).
+   * Run forward from the current position until halted/trapped or
+   * maxEvents, collecting every InstructionEvent. The step counter is
+   * cumulative, so tick values are returned absolute — engine.play
+   * normalizes them.
    */
   collectRemaining(maxEvents?: number): InstructionEvent[] {
     const cap = maxEvents ?? this.maxEvents;
@@ -255,7 +261,7 @@ export class WindyDebugger {
     try {
       this.session.free();
     } catch {
-      // ignore
+      // already freed — ignore
     }
   }
 }

@@ -9,8 +9,8 @@ import {
 } from './interpreter/windy.ts';
 import './App.css';
 
-// windy/examples/*.wnd 를 빌드 타임에 raw string 으로 번들. `pnpm sync:examples`
-// 로 ../windy/examples/ 에서 src/examples/ 로 동기화한다.
+// Bundle windy/examples/*.wnd as raw strings at build time. Run
+// `pnpm sync:examples` to refresh src/examples/ from ../windy/examples/.
 const EXAMPLES_RAW = import.meta.glob('./examples/*.wnd', {
   eager: true,
   query: '?raw',
@@ -28,7 +28,7 @@ const EXAMPLES: Record<string, string> = Object.fromEntries(
     .sort(([a], [b]) => a.localeCompare(b)),
 );
 
-// hello.wnd 가 가장 짧고 명확한 첫 인상이라 기본값으로 사용.
+// hello.wnd is the shortest, clearest first impression — use it as the default.
 const DEFAULT_PROGRAM = EXAMPLES['hello'] ?? Object.values(EXAMPLES)[0] ?? '';
 
 type Mode = 'play' | 'debug';
@@ -38,7 +38,7 @@ function App() {
   const [code, setCode] = useState(DEFAULT_PROGRAM);
   const [mode, setMode] = useState<Mode>('play');
 
-  // play 모드 상태
+  // play-mode state
   const [playStatus, setPlayStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
   const [playInfo, setPlayInfo] = useState<{
     events: number;
@@ -48,7 +48,7 @@ function App() {
   } | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
 
-  // debug 모드 상태
+  // debug-mode state
   const debuggerRef = useRef<WindyDebugger | null>(null);
   const [snapshot, setSnapshot] = useState<DebugSnapshot | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
@@ -64,7 +64,7 @@ function App() {
     };
   }, []);
 
-  // 코드/모드 변경 시 디버그 세션 무효화
+  // Invalidate the debug session whenever code or mode changes.
   useEffect(() => {
     if (debuggerRef.current) {
       debuggerRef.current.free();
@@ -91,17 +91,17 @@ function App() {
       await ensureWindyInitialized();
       const result = traceProgram(code);
       if (result.capReached) {
-        // 무한 드리프트/루프 — 5분짜리 NOP 음악이 나가는 걸 막는다. 사용자에게
-        // 코드를 고치라고 안내. trapped 는 SPEC상 의미있는 종료라 재생 허용.
+        // Infinite drift / loop — refuse to schedule 5 minutes of NOP audio.
+        // Trapped runs are SPEC-defined terminations, so we still play those.
         setPlayError(
-          `종료하지 않는 코드입니다 (${result.stepCount} step 캡 도달). ` +
-            `IP가 @ 또는 IP collision merge로 도달 가능한지 확인하세요.`,
+          `Code does not halt (cap reached at ${result.stepCount} steps). ` +
+            `Make sure the IP can reach an @ or end via IP collision merge.`,
         );
         setPlayStatus('error');
         return;
       }
       if (result.events.length === 0) {
-        setPlayError('실행 가능한 instruction이 없습니다 — 코드를 확인하세요.');
+        setPlayError('No executable instructions — check your code.');
         setPlayStatus('error');
         return;
       }
@@ -131,7 +131,7 @@ function App() {
     setDebugError(null);
     try {
       await ensureWindyInitialized();
-      ensureEngine(); // audio 컨텍스트만 보장 (resume은 step에서)
+      ensureEngine(); // ensure the audio context exists; resume happens on step
       debuggerRef.current?.free();
       const dbg = new WindyDebugger(code);
       debuggerRef.current = dbg;
@@ -147,7 +147,7 @@ function App() {
     const engine = ensureEngine();
     await engine.resume();
 
-    // 현재 보이는 opcode를 sonify → 그 다음 step
+    // Sonify the opcode under the cursor, then advance one step.
     const ev = dbg.currentEvent();
     if (ev) engine.playImmediate(ev);
     dbg.step();
@@ -195,7 +195,7 @@ function App() {
         <h1>
           windy-<span className="accent">aria</span>
         </h1>
-        <p className="tagline">바람의 흐름이 곧 음악이 되는 언어</p>
+        <p className="tagline">A sonification of windy-lang — the wind is the melody.</p>
       </header>
 
       <main>
@@ -231,7 +231,7 @@ function App() {
               />
             </label>
             <span className="example-list">
-              예제:{' '}
+              Examples:{' '}
               {Object.keys(EXAMPLES).map((key) => (
                 <button
                   key={key}
@@ -246,7 +246,7 @@ function App() {
                 className="link-btn dice"
                 onClick={rollRandom}
                 disabled={loading || playing}
-                title="2D 랜덤 windy 프로그램 생성"
+                title="Generate a random 2D windy program"
               >
                 🎲 random
               </button>
@@ -265,20 +265,20 @@ function App() {
             <>
               <div className="row" style={{ marginTop: '0.6rem' }}>
                 <button onClick={handlePlay} disabled={loading || playing}>
-                  {playing ? '▶ 재생 중' : loading ? '준비 중…' : '▶ 재생'}
+                  {playing ? '▶ Playing' : loading ? 'Loading…' : '▶ Play'}
                 </button>
               </div>
               <div className="status">
-                {playError && <span className="error">에러: {playError}</span>}
+                {playError && <span className="error">Error: {playError}</span>}
                 {!playError && playInfo && (
                   <span>
                     {playInfo.trapped && '⚠ trapped — '}
-                    {playInfo.events} instruction · {playInfo.stepCount} step ·{' '}
-                    {playInfo.durationSec.toFixed(1)}초
+                    {playInfo.events} instructions · {playInfo.stepCount} steps ·{' '}
+                    {playInfo.durationSec.toFixed(1)}s
                   </span>
                 )}
                 {!playError && !playInfo && (
-                  <span className="hint">windy-lang 코드를 입력하고 재생을 누르세요.</span>
+                  <span className="hint">Enter windy-lang code and press Play.</span>
                 )}
               </div>
             </>
@@ -288,7 +288,7 @@ function App() {
             <>
               <div className="row" style={{ marginTop: '0.6rem' }}>
                 {!debugStarted && (
-                  <button onClick={startDebug}>⏵ 디버그 시작</button>
+                  <button onClick={startDebug}>⏵ Start debugging</button>
                 )}
                 {debugStarted && (
                   <>
@@ -305,17 +305,17 @@ function App() {
                 )}
               </div>
               <div className="status">
-                {debugError && <span className="error">에러: {debugError}</span>}
+                {debugError && <span className="error">Error: {debugError}</span>}
                 {!debugError && !debugStarted && (
                   <span className="hint">
-                    "디버그 시작"으로 세션을 만들면 한 step씩 진행하며 매 instruction의 소리를 들을 수
-                    있습니다.
+                    Start debugging to step through one instruction at a time and hear each one as
+                    it executes.
                   </span>
                 )}
                 {!debugError && debugDone && (
                   <span>
-                    {snapshot.halted ? '✓ 정상 종료 (halted)' : '⚠ 트랩 (trapped)'} · 총{' '}
-                    {snapshot.stepCount} step
+                    {snapshot.halted ? '✓ Halted cleanly' : '⚠ Trapped'} · {snapshot.stepCount}{' '}
+                    steps
                   </span>
                 )}
               </div>
@@ -326,11 +326,11 @@ function App() {
         </section>
 
         <section className="panel">
-          <h2>매핑 요약</h2>
+          <h2>Sound mapping</h2>
           <p className="hint">
-            8 풍향 → C 펜타토닉 (C4–G5) · 디지트 0–9 → C5–A6 · 산술/스택 → square burst ·
-            I/O → sawtooth · TURBULENCE → 노이즈 · GUST/CALM → 글리산도 · HALT → 저음 페이드.
-            전체 명세는{' '}
+            Eight winds → C major pentatonic (C4–G5) · digits 0–9 → C5–A6 · arithmetic & stack
+            → square burst · I/O → sawtooth · TURBULENCE → noise · GUST/CALM → glissando ·
+            HALT → low sine fade. Full spec in{' '}
             <a
               href="https://github.com/sisobus/windy-aria/blob/master/docs/MAPPING.md"
               target="_blank"

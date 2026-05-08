@@ -3,7 +3,8 @@ import type { InstructionEvent, SoundEvent, Opcode, Timbre } from '../types.ts';
 /**
  * windy-lang opcode → sound parameters.
  *
- * docs/MAPPING.md의 표가 진실 원본. 이 파일은 그 표를 코드로 옮긴 것.
+ * docs/MAPPING.md is the source of truth; this file is that table
+ * transcribed into code.
  */
 
 interface SoundParams {
@@ -11,7 +12,7 @@ interface SoundParams {
   duration: number;
   velocity: number;
   timbre: Timbre;
-  /** 글리산도가 있는 경우 끝 주파수 */
+  /** End frequency, if this opcode glissandos. */
   endFrequency?: number;
 }
 
@@ -80,11 +81,11 @@ const IO_PARAMS: Record<Extract<Opcode, 'PUT_NUM' | 'PUT_CHR' | 'GET_NUM' | 'GET
   };
 
 /**
- * 단일 instruction을 단일 SoundEvent로 변환한다.
+ * Translate one instruction into one (or a few) SoundEvents.
  *
- * 일부 opcode는 두 음(글리산도, dual-tone)을 만들어야 하는데,
- * v1에서는 단순화를 위해 하나의 SoundEvent로 표현하고 글리산도는
- * synth가 endFrequency를 보고 처리한다.
+ * Some opcodes need two voices (glissando, dual-tone). v1 keeps it
+ * simple: a single SoundEvent represents the glissando and the synth
+ * handles it via the endFrequency hint.
  */
 export function mapInstruction(event: InstructionEvent, when: number): SoundEvent[] {
   const { opcode, digit, ipId } = event;
@@ -92,7 +93,7 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
 
   switch (opcode) {
     case 'NOP':
-      // 무음 — 이벤트 자체를 만들지 않음
+      // Silence — produces no event at all.
       return [];
 
     case 'HALT':
@@ -111,7 +112,7 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
       return [{ frequency: 800, duration: 0.05, velocity: 0.3, timbre: 'square', when, voiceId }];
 
     case 'SPLIT':
-      // 옥타브 위 sine — 폴리포니 분기 신호
+      // Sine an octave up — signals the polyphony fork.
       return [{ frequency: 880, duration: 0.2, velocity: 0.5, timbre: 'sine', when, voiceId }];
 
     case 'MOVE_S':
@@ -128,7 +129,7 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
       return [{ frequency: 0, duration: 0.15, velocity: 0.4, timbre: 'noise', when, voiceId }];
 
     case 'GUST':
-      // 글리산도 200 → 800 — synth가 endFrequency 처리
+      // Glissando 200 → 800; synth handles the sweep via endFrequency.
       return [
         {
           frequency: 200,
@@ -141,7 +142,7 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
       ];
 
     case 'CALM':
-      // 글리산도 800 → 200
+      // Glissando 800 → 200.
       return [
         {
           frequency: 800,
@@ -160,7 +161,7 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
     }
 
     case 'STR_MODE':
-      // 문자열 모드 토글 — short pluck
+      // String-mode toggle — short pluck.
       return [{ frequency: 440, duration: 0.06, velocity: 0.3, timbre: 'sawtooth', when, voiceId }];
 
     case 'ADD':
@@ -206,14 +207,15 @@ export function mapInstruction(event: InstructionEvent, when: number): SoundEven
 }
 
 /**
- * 단일 opcode의 기본 지속시간 — 시퀀서가 다음 이벤트의 when을 정할 때 참고.
+ * Default per-opcode duration — referenced by the sequencer when it
+ * decides the `when` of the next event.
  */
 export function defaultDuration(opcode: Opcode): number {
-  // NOP은 0이 아니라 짧은 쉼으로 — 멜로디 호흡
+  // NOP is a short rest, not zero — gives the melody room to breathe.
   if (opcode === 'NOP') return 0.1;
   if (opcode === 'HALT') return 0.4;
 
-  // 풍향은 0.18, 디지트는 0.12, 산술/스택은 0.08, 그 외는 0.1 정도
+  // Winds 0.18, digits 0.12, arithmetic/stack 0.08, everything else ~0.1.
   const winds: Opcode[] = [
     'MOVE_S',
     'MOVE_SW',

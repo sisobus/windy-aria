@@ -1,8 +1,8 @@
 /**
  * windy-lang opcode taxonomy — reflects SPEC v2.0 §4.
  *
- * Glyph 식별자는 SPEC의 primary Unicode glyph만 사용한다.
- * ASCII alias(>, ^, <, v)는 같은 Opcode로 매핑.
+ * Identifiers track the SPEC's primary Unicode glyphs only.
+ * ASCII aliases (`>`, `^`, `<`, `v`) map to the same Opcode.
  */
 
 export type Opcode =
@@ -52,44 +52,42 @@ export type Opcode =
   | 'GRID_PUT';
 
 /**
- * 인터프리터에서 발생하는 instruction 실행 이벤트.
- * windy-lang core가 추후 노출할 hook의 추상 표현.
- *
- * v1에서는 windy-lang 통합 전에 하드코딩된 시퀀스로 동작한다.
+ * One instruction execution event observed from the interpreter.
+ * Abstracts the hook that windy-lang exposes from its main loop.
  */
 export interface InstructionEvent {
   opcode: Opcode;
-  /** PUSH_DIGIT의 경우 0-9 값 */
+  /** Digit value 0-9 when opcode is PUSH_DIGIT. */
   digit?: number;
-  /** 그리드 좌표 (x, y) */
+  /** Grid coordinate (x, y). */
   position: { x: number; y: number };
-  /** IP 식별자 — SPLIT으로 다중 IP가 생기면 폴리포니에 사용 */
+  /** IP identifier — used for polyphony when SPLIT spawns multiple IPs. */
   ipId: number;
-  /** 발생 tick (시간축의 정수 인덱스) */
+  /** Tick index when this event fired (integer time axis). */
   tick: number;
 }
 
 /**
- * 합성기 한 발(note/burst)의 파라미터.
+ * One synth note/burst.
  */
 export interface SoundEvent {
-  /** Hz. noise burst인 경우 0. */
+  /** Hz. Zero for noise bursts. */
   frequency: number;
-  /** 초 단위 지속시간 */
+  /** Duration in seconds. */
   duration: number;
   /** 0..1 */
   velocity: number;
-  /** 음색 */
+  /** Timbre. */
   timbre: Timbre;
-  /** 시작 시각 (audioContext.currentTime 기준) */
+  /** Start time (audioContext.currentTime basis). */
   when: number;
-  /** 폴리포니용 채널 ID */
+  /** Channel id for polyphony. */
   voiceId: number;
 }
 
 export type Timbre =
-  | 'sine' // 부드러운 본체 — 풍향
-  | 'triangle' // 차분한 음 — 디지트
-  | 'square' // 단단한 음 — 산술/스택
-  | 'sawtooth' // 거친 음 — 브랜치/I/O
-  | 'noise'; // 노이즈 버스트 — TURBULENCE
+  | 'sine' // soft body — winds
+  | 'triangle' // calm tone — digits
+  | 'square' // hard tone — arithmetic/stack
+  | 'sawtooth' // gritty tone — branch/I/O
+  | 'noise'; // noise burst — TURBULENCE
