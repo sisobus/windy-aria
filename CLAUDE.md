@@ -166,20 +166,182 @@ windy SPEC을 만지면서 windy-aria로 즉시 검증해야 할 때:
 
 ## 배포
 
-- 1차: GitHub Pages (windy-aria.sisobus.com 또는 windy.sisobus.com/music)
-- 2차: 도메인 결정 후 마이그레이션
+- 1차 운영 중: **windy.sisobus.com/aria** (S3 + CloudFront, windy 본 페이지와 같은 distribution)
+- windy-aria 자체 GitHub Actions 워크플로우 (`.github/workflows/deploy.yml`) 가 master push 시 `s3://windy-language-web/aria/` 로 sync + `/aria/*` invalidation
+- CloudFront `rewrite-html` 함수가 `/aria` → 301 `/aria/`, `/aria/` → `/aria/index.html` 처리
+- windy 본 deploy.yml 은 `--exclude "aria/*"` 로 이 prefix 보존
 
-## 로드맵
+## 현재 상태 (2026-05-09 기준)
 
-| 주 | 마일스톤 |
+### 완료 (v1 in-scope 중)
+
+- ✅ **windy-lang sonification** — Session API 를 step-by-step 으로 driving 하며 35 opcode → SoundEvent 매핑
+- ✅ **풍향 → 사운드 매핑 v1** (`docs/MAPPING.md`, `src/audio/mapping.ts`)
+- ✅ **브라우저 라이브 재생** + Play / Debug 모드, BPM 조절, 무한루프 cap 가드
+- ✅ **Random 프로그램 생성기** (self-avoiding 2D walk + 종료 보장 HALT)
+- ✅ **windy-lang npm 의존** — workspace 가정 제거, 단독 클론 + `pnpm install` 로 동작
+- ✅ **examples 17개 번들** (windy/examples 와 sync, `pnpm sync:examples`)
+- ✅ **배포** + windy ↔ windy-aria 양방향 cross-link
+- ✅ **영문 surface** (UI / README / repo description)
+
+### v1 in-scope 중 미완
+
+| 영역 | 위치 / 비고 |
 |---|---|
-| 1 | 풍향 → 사운드 매핑 v1 + Web Audio 신디 + 정적 .wnd 파일 재생 |
-| 2 | windy-lang 인터프리터 실시간 통합 (이벤트 구독) |
-| 3 | 2D 커서 시각화 + 에디터 UI + 트랜스포트 |
-| 4 | WAV export + 공유 URL + 갤러리 + 배포 |
-| 5+ | 커뮤니티 곡 받기, 매핑 정교화, 라이브 코딩 모드 |
+| 2D 커서 시각화 | `src/visualizer/` (디렉토리 아직 없음). 현재는 Debug 패널의 텍스트 좌표 |
+| WAV export (오프라인 렌더) | `src/export/wav.ts` 예정. `OfflineAudioContext` 사용 |
+| 공유 URL (코드 + BPM 인코딩) | `src/share/url.ts` 예정. windy 본 페이지의 `#s=...` 컨벤션 정렬 |
+| 큐레이션된 windy 곡 갤러리 (~30곡) | `public/songs/` 또는 `src/songs/`. 현재 examples 17개는 SPEC 데모용 |
 
-v1 = 4주 후 windy 곡을 브라우저에서 작성·재생·공유 가능한 상태.
+### v1.1 후속
+
+| 영역 | 비고 |
+|---|---|
+| 다중 IP polyphony | windy-lang 에 `current_op_for(ip_index)` API 추가 필요 (cross-repo). 현재 primary IP 만 sonify |
+| `docs/MAPPING.md` 영문화 | 프로젝트 외부 surface 는 모두 영문이지만 이 문서만 한국어 |
+
+## 다음 세션 프롬프트
+
+각 항목은 **이 windy-aria 디렉토리에서 새 Claude Code 세션을 열고** 그대로 붙여넣으면 됩니다. 권장 진행 순서: 1 → 2 → 3 → 4 → 5 → 6.
+
+### 1. 2D 커서 시각화 (가장 효과 큰 작업)
+
+```
+windy-aria 의 v1 in-scope 중 "2D 커서 시각화" 를 구현해줘. 현재는 Debug
+패널이 IP 위치를 텍스트로만 보여주는데, 같은 코드 옆에 grid 뷰를 붙여서
+재생 중에 IP가 어느 셀에 있는지 실시간 하이라이트가 따라가야 한다.
+
+요구사항:
+- Play 모드: BPM 에 맞춰 audio 재생과 sync 된 하이라이트가 grid 위를 움직임
+- Debug 모드: Step 누를 때마다 하이라이트가 다음 셀로 이동
+- 살아있는 IP 가 여러 개일 때 각각 다른 색 (현재는 primary IP 만 사
+  onify 되더라도 시각화는 모든 IP 보여줄 것 — 실행 자체는 multi-IP 됨)
+- monospace 폰트, 코드 에디터와 같은 그리드 정렬
+- 다크 / 라이트 모두 가독성 OK
+
+새 디렉토리: src/visualizer/. 기존 src/interpreter/windy.ts 의
+WindyDebugger 가 이미 ip_x/ip_y/dx/dy/ip_count 를 노출하므로 그걸 구독.
+src/App.tsx 의 패널 옆에 시각화 컴포넌트 추가. CLAUDE.md 의 "남은 v1
+in-scope 항목" 표에서 이 항목 완료 처리.
+
+frontend-only thesis 절대 깨지 않음 (서버 추가 X, 외부 호출 X). 번들
+크기 1MB 미만 유지. UI 텍스트 모두 영문. 작업 끝나면 pnpm build / pnpm
+typecheck 통과 + 로컬 dev 서버에서 examples/anthem.wnd 와 storm.wnd
+재생하며 동작 확인 후 commit + push.
+```
+
+### 2. 큐레이션된 곡 갤러리 (사용자 본인이 첫 작곡가)
+
+```
+windy-aria 의 v1 마지막 in-scope 항목 "큐레이션된 windy 곡 갤러리" 를
+시작하자. 현재 src/examples/ 에 있는 17개는 windy SPEC 데모용 (hello,
+factorial, anthem 등) 이라 음악적으로 들으려고 만든 것이 아니다. 음악
+청취 목적의 곡 30개 정도를 별도 갤러리로 만들고 싶다.
+
+이 작업은 두 단계로 나눈다:
+
+(a) 인프라
+- 새 디렉토리: src/songs/*.wnd
+- src/App.tsx 에 갤러리 panel 추가 — 곡 이름 + 짧은 설명 + 재생 버튼
+- import.meta.glob 으로 빌드 타임 번들 (examples 와 같은 패턴)
+- 메타데이터: 각 곡에 title / 작곡 의도 한 줄 / 권장 BPM 을 frontmatter
+  주석으로
+
+(b) 첫 5–10곡 시드
+- CLAUDE.md "첫 사용자는 본인" 원칙 — 메인테이너가 직접 작곡할 곡들이지만,
+  세션에서는 "음악적으로 들리는 windy 패턴" 5–10개 시드를 만들어 줘 (예:
+  spiral with diagonal corners, descending pentatonic via clockwise wind
+  rotation, call-and-response via t SPLIT, etc.). 각 곡은 4000 step cap
+  안에 halt 해야 함.
+
+frontend-only thesis 유지, 영문 메타데이터, build/typecheck 통과 후 commit
++ push. CLAUDE.md 의 진행 상태 업데이트.
+```
+
+### 3. 공유 URL
+
+```
+windy-aria 에 "공유 URL" 기능을 추가하자. 사용자가 작성한 코드와 BPM 을
+URL hash 로 인코딩해서 링크 한 번으로 같은 청취 상태를 재현할 수 있어야 함.
+
+요구사항:
+- URL 포맷: #s=<base64url(deflate(source))>&bpm=<n>
+- CompressionStream API 로 deflate (Web 표준, 외부 라이브러리 0)
+- "Copy share link" 버튼 — 클릭 시 navigator.clipboard.writeText + 토스트
+- 페이지 로드 시 hash 가 있으면 에디터 자동 채움
+- hash 가 없거나 디코드 실패 시 graceful fallback (default hello.wnd)
+- URL 길이 8KB 미만 유지 (CloudFront / 브라우저 한계)
+
+windy 본 페이지가 이미 #s=... 컨벤션을 쓰는지 확인하고 (web/main.js 보거나
+URL 구조 비교) 같은 인코딩이면 호환되게 정렬할 것.
+
+새 모듈: src/share/url.ts. App.tsx 에 버튼 추가. UI 텍스트 영문.
+frontend-only thesis 유지. build/typecheck 통과 후 commit + push.
+CLAUDE.md 의 "남은 v1 in-scope 항목" 에서 이 항목 완료 처리.
+```
+
+### 4. WAV export
+
+```
+windy-aria 에 WAV export 기능을 추가하자. 현재 코드를 오프라인으로 렌더해서
+.wav 파일로 다운로드.
+
+구현 방향:
+- src/export/wav.ts (신규)
+- OfflineAudioContext (sampleRate 44100, mono 또는 stereo) 로 렌더
+- 기존 src/audio/synth.ts / src/audio/engine.ts 가 받는 ctx 를 추상화해서
+  AudioContext 와 OfflineAudioContext 모두 받도록 (이미 되어 있을 가능성
+  높음 — synth 가 그냥 BaseAudioContext 면 ok)
+- AudioBuffer → WAV 인코딩 (44바이트 RIFF 헤더 직접 작성, 외부 의존성 0)
+- App.tsx 에 "Download WAV" 버튼 — 파일명 `windy-aria-${bpm}bpm-${ts}.wav`
+
+frontend-only thesis 유지, 외부 라이브러리 추가 금지, 번들 크기 1MB 미만.
+영문 UI. build/typecheck 통과 + 실제로 hello.wnd 와 anthem.wnd 의 wav
+받아서 재생 가능 확인 후 commit + push. CLAUDE.md 진행 상태 업데이트.
+```
+
+### 5. docs/MAPPING.md 영문화
+
+```
+windy-aria 의 docs/MAPPING.md 가 한국어로 남아있는데, 프로젝트의 다른 모든
+external surface (README, UI, source comments, repo description) 는 영문이라
+일관성이 깨진다. 이 문서를 영문으로 옮겨줘.
+
+- 코드 변경 0 — 순수 문서 작업
+- 톤은 windy/SPEC.md 와 windy-aria/README.md 에 맞춤 (technical, 직설적)
+- 표 / 주파수 / 매핑 명세는 그대로 보존, 한국어 산문만 번역
+- 번역 끝나면 README.md 에 있는 "*(Currently in Korean — English
+  translation pending.)*" 주석 제거
+- CLAUDE.md "v1.1 후속" 에서 이 항목 완료 처리
+
+commit + push.
+```
+
+### 6. 다중 IP polyphony (cross-repo, v1.1)
+
+```
+windy-aria 가 SPLIT 으로 분기된 IP 들을 별도 voice 로 합성하도록 만들고 싶다.
+현재는 primary IP 만 sonify 됨 (src/interpreter/windy.ts 의 `currentEvent()`
+가 session.current_op() 만 호출 → ip 0 의 opcode만 반환).
+
+이 작업은 windy 와 windy-aria 양쪽 변경이 필요한 cross-repo 작업이다:
+
+1) windy 쪽 (별도 세션, windy 디렉토리에서 진행 권장)
+   - src/web/session.rs 에 `current_op_for(&self, ip_index: usize) -> String` 추가
+   - 기존 current_op() 는 current_op_for(0) 으로 위임
+   - tests + conformance 통과
+   - 패치 + Cargo.toml minor bump (2.1.0 → 2.2.0) + tag push → cargo + npm publish 자동화
+
+2) windy-aria 쪽 (이 세션 / 새 세션 어느 쪽이든)
+   - package.json: windy-lang ^2.2.0 으로 bump
+   - src/interpreter/windy.ts 의 collectRemaining() 이 모든 ip_index 를 순회하며
+     각 IP 의 InstructionEvent 를 voiceId = ip_index 로 emit
+   - src/audio/mapping.ts 와 synth.ts 는 이미 voiceId 를 받음 — 큰 변경 없음
+   - src/App.tsx 의 Debug 패널은 이미 ipCount 표시 중
+
+CLAUDE.md 의 "v1.1 후속" 에서 이 항목 완료 처리. examples/winds.wnd (5 IPs)
+와 anthem.wnd (collision merge) 로 청취 검증.
+```
 
 ## 참고
 
