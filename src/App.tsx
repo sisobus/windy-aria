@@ -9,22 +9,27 @@ import {
 } from './interpreter/windy.ts';
 import './App.css';
 
-const DEFAULT_PROGRAM = `→ 1 2 + . @
-`;
+// windy/examples/*.wnd 를 빌드 타임에 raw string 으로 번들. `pnpm sync:examples`
+// 로 ../windy/examples/ 에서 src/examples/ 로 동기화한다.
+const EXAMPLES_RAW = import.meta.glob('./examples/*.wnd', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>;
 
-const EXAMPLES: Record<string, string> = {
-  'east-add': '→ 1 2 + . @\n',
-  spiral: `→ 7 0 g . v
-^         <
-@ . g 0 0 ←
-`,
-  'gust-rotate': `→ 4 ≫ ↘ ↙ ↖ ↗ @
-`,
-  storm: `→ t @
-   ↑
-   <
-`,
-};
+function exampleKey(path: string): string {
+  // './examples/hello.wnd' → 'hello'
+  return path.replace(/^.*\//, '').replace(/\.wnd$/, '');
+}
+
+const EXAMPLES: Record<string, string> = Object.fromEntries(
+  Object.entries(EXAMPLES_RAW)
+    .map(([path, src]) => [exampleKey(path), src] as const)
+    .sort(([a], [b]) => a.localeCompare(b)),
+);
+
+// hello.wnd 가 가장 짧고 명확한 첫 인상이라 기본값으로 사용.
+const DEFAULT_PROGRAM = EXAMPLES['hello'] ?? Object.values(EXAMPLES)[0] ?? '';
 
 type Mode = 'play' | 'debug';
 
@@ -35,7 +40,12 @@ function App() {
 
   // play 모드 상태
   const [playStatus, setPlayStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
-  const [playInfo, setPlayInfo] = useState<{ events: number; durationSec: number } | null>(null);
+  const [playInfo, setPlayInfo] = useState<{
+    events: number;
+    durationSec: number;
+    trapped: boolean;
+    stepCount: number;
+  } | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
 
   // debug 모드 상태
@@ -79,8 +89,18 @@ function App() {
     setPlayStatus('loading');
     try {
       await ensureWindyInitialized();
-      const events = traceProgram(code);
-      if (events.length === 0) {
+      const result = traceProgram(code);
+      if (result.capReached) {
+        // 무한 드리프트/루프 — 5분짜리 NOP 음악이 나가는 걸 막는다. 사용자에게
+        // 코드를 고치라고 안내. trapped 는 SPEC상 의미있는 종료라 재생 허용.
+        setPlayError(
+          `종료하지 않는 코드입니다 (${result.stepCount} step 캡 도달). ` +
+            `IP가 @ 또는 IP collision merge로 도달 가능한지 확인하세요.`,
+        );
+        setPlayStatus('error');
+        return;
+      }
+      if (result.events.length === 0) {
         setPlayError('실행 가능한 instruction이 없습니다 — 코드를 확인하세요.');
         setPlayStatus('error');
         return;
@@ -88,10 +108,15 @@ function App() {
       const engine = ensureEngine();
       engine.setBpm(bpm);
       await engine.resume();
-      engine.play(events);
+      engine.play(result.events);
 
-      const totalSec = events.length * (60 / bpm) + 0.5;
-      setPlayInfo({ events: events.length, durationSec: totalSec });
+      const totalSec = result.events.length * (60 / bpm) + 0.5;
+      setPlayInfo({
+        events: result.events.length,
+        durationSec: totalSec,
+        trapped: result.trapped,
+        stepCount: result.stepCount,
+      });
       setPlayStatus('playing');
       window.setTimeout(() => setPlayStatus('idle'), totalSec * 1000);
     } catch (e) {
@@ -247,7 +272,9 @@ function App() {
                 {playError && <span className="error">에러: {playError}</span>}
                 {!playError && playInfo && (
                   <span>
-                    {playInfo.events} instruction · {playInfo.durationSec.toFixed(1)}초
+                    {playInfo.trapped && '⚠ trapped — '}
+                    {playInfo.events} instruction · {playInfo.stepCount} step ·{' '}
+                    {playInfo.durationSec.toFixed(1)}초
                   </span>
                 )}
                 {!playError && !playInfo && (

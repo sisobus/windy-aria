@@ -1,0 +1,97 @@
+→ #↓t #↓t #↓t #↓t @
+
+
+
+
+
+
+
+
+
+   @   @   @   @
+
+  sisobus
+  ----------------------------------------------------------------------
+  Five winds blow simultaneously across the grid.
+
+  Output:  empty.  Exit 0.
+
+  This program never prints anything. It exists to exhibit Windy's
+  multi-IP machinery: at peak the runtime juggles five live IPs
+  in parallel, each tracing its own path before halting at its own
+  `@`.
+
+  How it works
+  ------------
+  Row 0 has four `t` SPLIT cells. The parent IP enters going east
+  and crosses them in sequence. After each `t` the live IP list
+  grows by one — a fresh child spawned at (parent_x − 1, 0) going
+  west. Four splits = five total IPs (1 parent + 4 children).
+
+  Cascade avoidance
+  -----------------
+  Two design tricks keep the splits clean:
+
+  1. `#` (TRAMPOLINE) before each `t`. The parent reads `#`,
+     skips the next cell, and lands on `t`. The cell that gets
+     skipped is always `↓` — that's deliberate.
+  2. `↓` at every (col_t − 1) position. When the child reads its
+     first cell (the one it spawned on), it sees `↓`, sets its
+     direction to south, and immediately leaves row 0 for row 1.
+     It never re-traverses the row of `t`s, so no child re-fires
+     SPLIT and the population can't snowball.
+
+  The parent uses `#` to *skip* the `↓` cells so they don't
+  redirect *parent* south — only children, on their way out.
+
+  After the four splits the parent continues east, falls off
+  into one final `@` at (18, 0), and halts.
+
+  The four children
+  -----------------
+  Each child spawns at columns 3, 7, 11, 15 (=col_t − 1), heads
+  south down its own column, and crosses ten blank rows before
+  hitting an `@` waiting for it on row 10:
+
+      col 3   col 7   col 11   col 15
+       │        │         │         │
+       ↓        ↓         ↓         ↓
+       (drift through 9 rows of NOP space)
+       ↓        ↓         ↓         ↓
+       @        @         @         @     <- row 10
+
+  The four `@`s on row 10 line up exactly under each child's
+  spawn column. Each child halts independently; there are no
+  collisions and no merges.
+
+  Tick-by-tick IP count
+  ---------------------
+    tick 0–3   : 1 (parent only)
+    tick 4     : 2 (child1 born by `t` at col 4)
+    tick 7     : 3 (child2 born at col 8)
+    tick 10    : 4 (child3 born at col 12)
+    tick 13    : 5 ← peak, all four children alive at once
+    tick 14    : 5 (parent still alive, all four children still
+                    descending)
+    tick 15    : 3 (parent halts at @ on col 18; child1 halts at
+                    its @ on row 10)
+    tick 18    : 2 (child2 halts)
+    tick 21    : 1 (child3 halts)
+    tick 24    : 0 (child4 halts; live IP list empty → program ends)
+
+  Things to notice
+  ----------------
+  - Step under `windy debug examples/winds.wnd`. Watch the
+    `ips:` row in the state panel climb: 1 → 2 → 3 → 4 → 5,
+    then drain back down to 0. The grid view highlights every
+    live IP cell, so the descending columns are visible at once.
+
+  - The blank rows in the source aren't padding — they are the
+    children's actual flight paths, drawn into the grid as
+    empty space. Each child crosses ten of those rows before
+    landing on its `@`.
+
+  - Try changing one of the `↓` cells to a space. That child
+    will go west off the grid instead, drift forever, and
+    --max-steps will fire. The `↓` redirects are what bound
+    the children's lifetimes.

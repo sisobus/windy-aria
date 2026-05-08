@@ -122,39 +122,47 @@ windy-aria/
 
 ### 사전 조건
 
-- Node.js LTS, pnpm
-- Rust toolchain + wasm-pack (windy-lang wasm 빌드용)
-- 워크스페이스에 자매 repo `../windy`가 함께 체크아웃되어 있어야 함 (sisobus-workspace를 `--recursive`로 클론)
+- Node.js ≥ 20.19 또는 ≥ 22.12 (Vite 8 요구사항), pnpm
+- 그 외 도구 불필요 — windy-lang은 npm registry의 정식 패키지로 받는다
 
 ### 첫 셋업
 
 ```bash
-pnpm setup       # ../windy를 wasm-pack으로 빌드 + 의존성 설치
+pnpm install     # windy-lang 포함 모든 의존성 설치
 pnpm dev         # 개발 서버 (http://localhost:5173)
 ```
 
-`pnpm setup`은 다음을 한 번에 실행한다:
-1. `cd ../windy && wasm-pack build --target web --release --out-dir web/pkg`
-2. `pnpm install` (file:../windy/web/pkg 의존성을 windy-lang으로 링크)
+windy-aria는 자매 `../windy` 디렉토리 없이도 단독 클론으로 빌드된다. wasm-pack/Rust는 이 repo에서 필요 없다.
 
 ### 일상 명령
 
 ```bash
-pnpm dev          # Vite dev (HMR + wasm 자동 번들링)
-pnpm build        # 정적 빌드 → dist/
-pnpm preview      # 빌드 결과 로컬 서빙
-pnpm typecheck    # tsc -b --noEmit
-pnpm build:windy  # ../windy만 다시 빌드 (windy SPEC 변경 시)
+pnpm dev               # Vite dev (HMR)
+pnpm build             # 정적 빌드 → dist/
+pnpm preview           # 빌드 결과 로컬 서빙
+pnpm typecheck         # tsc -b --noEmit
+pnpm sync:examples     # ../windy/examples/*.wnd → src/examples/ (워크스페이스에서만)
 ```
 
 ### windy-lang 의존성 모델
 
-`package.json`의 `windy-lang` 의존성은 `file:../windy/web/pkg`로 로컬 경로를 가리킨다. 즉:
-- 워크스페이스 컨벤션상 windy-aria는 sisobus-workspace의 submodule이며, 자매 windy submodule이 같은 레벨에 있다고 가정
-- windy SPEC가 바뀌면 `pnpm build:windy`로 wasm 재빌드, 자동으로 모든 사용처에 반영
-- 외부 사용자에게 npm 패키지로 배포하려면 windy-lang을 npmjs에 publish 후 `npm` 의존성으로 전환
+`package.json`의 `windy-lang`은 npmjs.com에 publish된 정식 패키지 (`^2.1.0`)를 받는다. wasm-pack 산출물(`web/pkg`)이 그대로 npm 패키지로 발행되므로 추가 변환 없음.
 
-향후 windy-lang npm publish가 끝나면 이 file 의존성을 정식 버전 의존성으로 교체할 수 있다.
+windy SPEC을 만지면서 windy-aria로 즉시 검증해야 할 때:
+
+1. `cd ../windy && wasm-pack build --target web --release --out-dir web/pkg`
+2. windy-aria의 `package.json`에 일시적으로 `pnpm.overrides` 추가 — 또는 `pnpm link --global`
+   ```json
+   "pnpm": { "overrides": { "windy-lang": "file:../windy/web/pkg" } }
+   ```
+3. `pnpm install` 후 dev 검증
+4. PR이 merge + 새 v태그 push되어 npm publish 완료되면 override 제거하고 `windy-lang` 버전을 새 버전으로 올리고 `pnpm install`
+
+매번 windy SPEC을 만지지 않는다면 그냥 npm publish 흐름을 기다리면 된다.
+
+### examples 동기화
+
+`src/examples/*.wnd`은 windy repo의 `examples/`에서 카피된다. windy 측에 새 예제가 추가되면 `pnpm sync:examples`로 동기화 후 commit. 워크스페이스 (`../windy` 존재) 환경에서만 동작.
 
 ## 배포
 

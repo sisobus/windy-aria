@@ -9,13 +9,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "build:windy": "cd ../windy && wasm-pack build --target web --release --out-dir web/pkg",
-    "setup": "pnpm build:windy && pnpm install"
+    "sync:examples": "rm -f src/examples/*.wnd && cp ../windy/examples/*.wnd src/examples/ && echo 'synced examples from ../windy/examples/'"
   },
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "windy-lang": "file:../windy/web/pkg"
+    "windy-lang": "^2.1.0"
   },
   "devDependencies": {
     "@types/react": "latest",

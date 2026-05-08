@@ -1,0 +1,108 @@
+"dniw ekil swolf edoc"v
+                      ≫
+
+                      → , , , , , ↘
+                    ↘
+                    ≪→→t←           ↓
+
+                    ,               ,
+
+                    ,               ,
+
+                    ,               ,
+
+                    ,               ,
+
+                    ,               ,
+
+                    ↑               ↙
+
+                      ↖ , , , , , ←
+
+  sisobus
+  ----------------------------------------------------------------------
+  Output:  code flows like wind
+
+  Notice there is no @ anywhere in this program. It still halts
+  cleanly, exit 0. Two winds meet head-on at the eye of the spiral
+  and the program ends.
+
+  How it flows
+  ------------
+  Row 0 builds the message in reverse so 'c' lands on top of the
+  stack, then `v` redirects the IP south. On the next tick, `≫`
+  raises its speed to 2.
+
+  From there the IP rides a clockwise rotation with diagonal
+  corners — `↘ ↙ ↖` — at speed 2. The four edges of the rotation
+  hold five `,` print cells each, evenly spaced at the speed-2
+  stride:
+
+    top edge        →  prints "code "
+    right edge      →  prints "flows"
+    bottom edge     →  prints " like"   (read west-to-east)
+    left edge       →  prints " wind"
+
+  After printing the final 'd' on the left edge at (20, 7), the
+  IP advances north to (20, 5) — the eye of the storm. Three
+  things happen there in quick succession:
+
+    (20, 5)  ≪   speed drops to 1
+    (20, 4)  ↘   redirect to south-east
+    (21, 5)  →   set east
+
+  Speed is now 1. The next two cells are `→` `→`, and then `t`:
+
+    (22, 5)  →   continue east
+    (23, 5)  t   SPLIT — spawn child at (22, 5) going west,
+                  speed 1 (inherited from parent), empty stack.
+                  Parent advances east to (24, 5).
+    (24, 5)  ←   parent reverses, now heading west.
+
+  On the next tick the parent and the child both arrive at
+  (23, 5) — the same cell, from opposite sides:
+
+    parent: (24, 5) ←  →  advances west to (23, 5)
+    child:  (22, 5) →  →  advances east to (23, 5)
+
+  End-of-tick collision pass (SPEC §3.8): two IPs share (23, 5).
+  Direction sum is (-1, 0) + (+1, 0) = (0, 0) — head-on.
+  The merged IP dies. Live IP list is now empty, so the runtime
+  halts. No `@` ever runs.
+
+  The drop to speed 1 is load-bearing
+  ----------------------------------
+  At speed 2 the parent only ever lands on even-x cells. The
+  child of `t` is spawned at (parent_x − 1), which is odd-x
+  while the parent traverses east-going edges, and never coincides
+  with the parent again — they slide past each other on
+  parities forever. Speed 1 puts both IPs back on a common
+  parity, so the head-on merge can actually happen.
+
+  In other words: the wind has to slow down for the storm to
+  meet itself.
+
+  All four v2.0 mechanics in one program
+  --------------------------------------
+  - Eight winds (the diagonal corner glyphs ↘ ↙ ↖ + cardinal → ↓ ↑ ←)
+  - Wind speed (≫ on the way in, ≪ at the eye)
+  - SPLIT (`t` creates the second IP)
+  - IP collision merge (the program halts via head-on cancel,
+    not via @)
+
+  Things to notice
+  ----------------
+  - The corners of the rotation are visible 45° wedges in the
+    source. The spiral isn't drawn over the source — the source
+    *is* the spiral.
+
+  - Step through it under `windy debug examples/anthem.wnd`. The
+    state panel will show `ips: 1` for the entire outer rotation,
+    flip to `ips: 2` on the tick `t` runs, and drop to `ips: 0`
+    one tick later when the merge fires. That `2 → 0` transition
+    is the halt.
+
+  - The interior of the rotation isn't decorated this time —
+    the action that fills it is the IP itself, on its way to
+    the merge. Open the file in any text editor and the path
+    is right there.

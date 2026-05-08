@@ -1,0 +1,45 @@
+#@,"A",t"B",@
+
+  sisobus
+  ----------------------------------------------------------------------
+  Concurrent IPs (v0.4) via the `t` (SPLIT) opcode.
+
+  Tick by tick on row 0 — IP0 is the original, IP1 spawns at the t cell:
+
+    tick  IP0 cell   IP0 effect          IP1 cell   IP1 effect
+    ----  --------   ------------------  ---------  --------------------
+     1    (0)#       trampoline → skip
+     2    (2),       underflow print 0       —         not yet alive
+     3    (3)"       strmode on              —
+     4    (4)A       push 65                 —
+     5    (5)"       strmode off             —
+     6    (6),       print 'A'               —
+     7    (7)t       SPLIT                   —     IP1 spawns at (6,0)
+                                                       going west, empty stack
+     8    (8)"       strmode on             (6),       underflow print 0
+     9    (9)B       push 66                (5)"       strmode on
+    10    (10)"      strmode off            (4)A       push 65
+    11    (11),      print 'B'              (3)"       strmode off
+    12    (12)@      HALT (IP0 only)        (2),       print 'A'
+                                            (1)@       HALT (next tick)
+
+  After tick 12 IP0 is gone but IP1 keeps going. Tick 13: IP1 at (1,0) =
+  `@`, halts. List empties → program ends.
+
+  Stdout sequence (in tick order):
+    tick 2:  '\0'  (IP0)
+    tick 6:  'A'   (IP0)
+    tick 8:  '\0'  (IP1)
+    tick 11: 'B'   (IP0)
+    tick 12: 'A'   (IP1)
+
+  Visible chars (most terminals swallow \0): "ABA".
+
+  Things to notice:
+    - Each IP has its own stack. IP1's stack is empty when it spawns; it
+      builds its own "A" by re-running the strmode segment going west.
+    - `@` only halts the executing IP — IP0 halts at (12,0) but IP1
+      keeps running until it finds its own `@` at (1,0).
+    - IP0 uses `#` (trampoline) at (0,0) so it skips IP1's halt cell at
+      (1,0). Without that, IP0 would have halted before ever reaching
+      `t`.

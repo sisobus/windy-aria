@@ -1,0 +1,62 @@
+"YDNIW"≫$,$,$,$,$,@@
+
+  sisobus
+  ----------------------------------------------------------------------
+  Wind speed shaping the output. Run as-is and the program prints
+  WINDY.
+
+  How: "YDNIW" pushes 5 codepoints in reverse, so 'W' lands on top
+  of the stack. Then ≫ raises speed to 2, and the second half is a
+  1D obstacle course of $/, pairs:
+
+      $   DROP    — tosses the top
+      ,   PUT_CHR — pops the top and writes its codepoint as a char
+
+  At speed 2 the IP only lands on every other cell. The layout puts
+  every $ on an odd-index cell and every , on an even-index cell, so
+  the IP hits all five `,`s and flies over all five `$`s, draining
+  the stack cleanly into "WINDY". Without the speed boost the IP
+  would visit every cell and the alternating $/, sequence would drop
+  a letter for every one it prints — so wind speed is literally
+  what makes the message reach stdout.
+
+  Tick-by-tick:
+
+    tick  cell        op            speed   stack                    out
+    ----  ----------  ------------  -----   ----------------------   ---
+     1    (0)  "      strmode on    1       []                       —
+     2    (1)  Y      push 89       1       [89]                     —
+     3    (2)  D      push 68       1       [89,68]                  —
+     4    (3)  N      push 78       1       [89,68,78]               —
+     5    (4)  I      push 73       1       [89,68,78,73]            —
+     6    (5)  W      push 87       1       [89,68,78,73,87]         —
+     7    (6)  "      strmode off   1       (no change)              —
+     8    (7)  ≫      speed += 1    2       (no change)              —
+     9    (9)  ,      pop 87, putc  2       [89,68,78,73]            W
+    10    (11) ,      pop 73, putc  2       [89,68,78]               I
+    11    (13) ,      pop 78, putc  2       [89,68]                  N
+    12    (15) ,      pop 68, putc  2       [89]                     D
+    13    (17) ,      pop 89, putc  2       []                       Y
+    14    (19) @      HALT          —       []                       —
+
+  Ticks 9–13 advance by 2 columns each: the IP lands on columns 9,
+  11, 13, 15, 17 — exactly the `,` cells. The `$` cells at columns
+  8, 10, 12, 14, 16 are intermediate cells the IP flies over without
+  decoding (SPEC §3.7).
+
+  The trailing @@ is there because the IP halts at column 19 (one
+  past column 18) — speed-2 movement from (17) lands on (19).
+
+  Things to play with:
+
+    - Replace ≫ with ≫≫ to push speed to 3. The IP now lands on
+      columns 10, 13, 16, 19, ... none of which carry `,`, so it
+      prints nothing and falls into the trailing `@@`.
+
+    - Add a ≪ between two of the `,`s. At speed 2 the IP lands on
+      ≪, drops to speed 1, and starts traversing every cell again
+      — half the output is "WINDY"-style sampled, half is "$,$,..."
+      mangled.
+
+    - Trace it under `windy debug` and watch the `speed` row in the
+      state panel jump from 1 to 2 the moment the IP visits ≫.

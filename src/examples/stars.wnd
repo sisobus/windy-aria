@@ -1,0 +1,24 @@
+55+"*****"55+"****"55+"***"55+"**"55+"*"45*055+5*pv
+                                                  v                  <
+                                                  >,055+5*g1-:055+5*p|
+                                                                     @
+
+  sisobus
+  ----------------------------------------------------------------------
+  How this prints the triangle (a "2D for-loop" expressed in 1D):
+
+    1) Build the entire output on the stack first, IN REVERSE because
+       a stack is LIFO.  String-mode segments push '*' codepoints (42),
+       and `55+` pushes a newline (10).  After row 0's first 40 cells:
+
+         bottom -> 10, *****, 10, ****, 10, ***, 10, **, 10, *  <- top
+
+    2) Init a counter at grid (0, 50): `45*` pushes 4·5 = 20 (the total
+       characters to print), and `055+5*p` stores it.
+
+    3) The east-going loop on row 2 pops one char with `,`, decrements
+       the counter, stores it back, and uses `|` to halt when zero.
+       Top-of-stack = '*' first → output is "*\n**\n***\n****\n*****\n".
+
+  The same idea works for any structured shape: lay the bytes out on
+  the stack in reverse, then drain them with a counter.

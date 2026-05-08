@@ -119,14 +119,42 @@ export interface DebugSnapshot {
 }
 
 /**
+ * traceProgram 결과. capReached가 true면 cap이 prematurely 끊은 것 —
+ * 호출자는 무한 루프 가능성을 사용자에게 surface 해야 한다.
+ */
+export interface TraceResult {
+  events: InstructionEvent[];
+  /** @ 또는 IP 합병 등으로 자연 종료 */
+  halted: boolean;
+  /** 런타임 트랩 (e.g. ≪ at speed 1) — 이전 이벤트는 유효, 이후는 없음 */
+  trapped: boolean;
+  /** maxSteps 또는 maxEvents 한계로 잘림 — 실제로는 종료하지 않는 코드 */
+  capReached: boolean;
+  /** 실제 진행한 tick 수 */
+  stepCount: number;
+}
+
+/**
  * windy 프로그램을 실행하면서 InstructionEvent 스트림을 만든다.
  * Play 모드용. 한 번 호출에 한 번 sonification 시퀀스 생성.
+ *
+ * 실행이 cap에 막혀 잘렸는지 호출자가 알 수 있도록 halted/trapped/capReached
+ * 플래그를 함께 돌려준다.
  */
-export function traceProgram(source: string, options: RunOptions = {}): InstructionEvent[] {
+export function traceProgram(source: string, options: RunOptions = {}): TraceResult {
   const dbg = new WindyDebugger(source, options);
   const events = dbg.collectRemaining(options.maxEvents);
+  const halted = dbg.halted;
+  const trapped = dbg.trapped;
+  const stepCount = dbg.stepCount;
   dbg.free();
-  return events;
+  return {
+    events,
+    halted,
+    trapped,
+    capReached: !halted && !trapped,
+    stepCount,
+  };
 }
 
 /**
@@ -140,9 +168,19 @@ export class WindyDebugger {
   private maxEvents: number;
 
   constructor(source: string, options: RunOptions = {}) {
-    const maxSteps = options.maxSteps ?? BigInt(5000);
+    // 무한 드리프트 방지 — 한 IP가 grid 밖으로 나가도 SPEC상 grid는 무한해서
+    // 트랩 안 함. 4000 step / 500 event 캡이 60–90초 분량 sonification에 해당.
+    const maxSteps = options.maxSteps ?? BigInt(4000);
     this.session = new Session(source, '', options.seed ?? null, maxSteps);
-    this.maxEvents = options.maxEvents ?? 2000;
+    this.maxEvents = options.maxEvents ?? 500;
+  }
+
+  get halted(): boolean {
+    return this.session.halted;
+  }
+
+  get trapped(): boolean {
+    return this.session.trapped;
   }
 
   /**

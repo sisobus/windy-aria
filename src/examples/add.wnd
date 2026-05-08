@@ -1,0 +1,34 @@
+&&+.@
+
+  sisobus
+  ----------------------------------------------------------------------
+  Read two integers from stdin, print their sum.
+
+  Usage:
+      echo "3 4" | windy run examples/add.wnd
+      → 7
+
+  How: the source is a single five-cell row.
+
+      &   GET_NUM   read one decimal integer from stdin, push to stack.
+                    Whitespace between integers is consumed automatically;
+                    EOF or malformed input pushes -1.
+      &   GET_NUM   read the second integer.
+      +   ADD       pop b, pop a, push a + b.
+      .   PUT_NUM   pop the top of the stack, write its decimal repr
+                    followed by a single space.
+      @   HALT      end the program.
+
+  Notes
+  -----
+  - Stack values are arbitrary-precision (SPEC §2 #4). Try
+    "100000000000000000 1" — no overflow, the sum is exact.
+  - The two integers can be on the same line or separate lines —
+    `&` skips leading whitespace before each read.
+  - Try `echo "x 4"` (non-numeric first input). The first `&`
+    consumes the bad token until whitespace and pushes -1, the
+    second reads 4, and the program prints `3` (= -1 + 4).
+  - Five characters is also the entire program. This is what
+    Windy looks like once you stop bracing for ceremony: opcodes
+    are glyphs, the IP walks the row, and the program is the
+    flow chart.

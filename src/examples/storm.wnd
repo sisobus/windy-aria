@@ -1,0 +1,86 @@
+→"AB"t"CD"←@
+
+  sisobus
+  ----------------------------------------------------------------------
+  IP collision merge as a runtime garbage collector.
+
+  The source is a one-row 12-cell program. Two IPs build complementary
+  stacks ("CDDC" and "BAAB") before colliding head-on at column 4 on
+  tick 15. The SPEC §3.8 collision pass spots them at the same cell on
+  the same tick, computes their direction sum (-1, 0) + (1, 0) = (0, 0)
+  ("head-on storm cancels itself"), and removes them both. The live
+  IP list empties → program halts cleanly.
+
+  Tick-by-tick:
+
+    tick  IP0 cell  IP0 effect                   IP1 cell  IP1 effect
+    ----  --------  ---------------------------  --------  -----------------
+     1    (0,0)→    set east; → (1,0)            —         not yet alive
+     2    (1,0)"    strmode on; → (2,0)          —
+     3    (2,0)A    push 65; → (3,0)             —
+     4    (3,0)B    push 66; → (4,0)             —
+     5    (4,0)"    strmode off; → (5,0)         —
+     6    (5,0)t    SPLIT IP1 at (4,0) west      —         (born this tick,
+                    speed 1, empty stack;                    runs from tick 7)
+                    → (6,0)
+     7    (6,0)"    strmode on; → (7,0)          (4,0)"    strmode on; → (3,0)
+     8    (7,0)C    push 67; → (8,0)             (3,0)B    push 66; → (2,0)
+     9    (8,0)D    push 68; → (9,0)             (2,0)A    push 65; → (1,0)
+    10    (9,0)"    strmode off; → (10,0)        (1,0)"    strmode off; → (0,0)
+    11    (10,0)←   set west; → (9,0)            (0,0)→    set east; → (1,0)
+    12    (9,0)"    strmode on; → (8,0)          (1,0)"    strmode on; → (2,0)
+    13    (8,0)D    push 68 again; → (7,0)       (2,0)A    push 65 again; → (3,0)
+    14    (7,0)C    push 67 again; → (6,0)       (3,0)B    push 66 again; → (4,0)
+    15    (6,0)"    strmode off; → (5,0)         (4,0)"    strmode off; → (5,0)
+       ↓ end-of-tick collision pass: both IPs at (5,0) ↓
+              IP0 dir (-1,0), IP1 dir (1,0). Sum (0,0) ⇒ head-on.
+              IP0 stack [65,66,67,68,68,67]  (codepoints "ABCDDC")
+              IP1 stack [66,65,65,66]        (codepoints "BAAB")
+              The merge would have produced stack
+                [65,66,67,68,68,67,66,65,65,66]  ⇒ "ABCDDCBAAB"
+              (birth-order concat: oldest at bottom) but dies anyway.
+              Both IPs removed. Program halts.
+
+  IP0 walked through "AB" once on the way east, hit `t`, kept going
+  east through "CD", bounced off `←`, then revisited "DC" going back
+  west — picking up "D" and "C" a second time before the collision.
+  Stack ends up as [A,B,C,D,D,C] = "ABCDDC". IP1 did the symmetric
+  thing on the western side: traversed "BA" going west, bounced off
+  the `→` at column 0, came back through "AB", arriving at the
+  collision with stack [B,A,A,B] = "BAAB".
+
+  The collision rule (SPEC §3.8 IP Collision):
+
+    1. After every tick's movement step, group live IPs by (x, y).
+    2. For each group of two-or-more, sort by birth order.
+    3. Merge oldest-first into a single IP at that cell:
+         stack    : concat in birth order, oldest at bottom
+         direction: per-axis vector sum, clipped to {-1, 0, +1}
+                    if the sum is (0, 0) → merged IP dies
+         speed    : max of constituents
+         strmode  : forced off
+    4. Remove the absorbed IPs from the live list.
+
+  The merge pass is also a runtime garbage collector for IPs that
+  end up sharing a cell. Without it, this layout would fork-bomb:
+  every visit to (5,0) hits `t` and spawns another child, doubling
+  the population on every cycle. The collision pass turns that
+  pathological case into a clean exit-0.
+
+  Things to try:
+
+    - Watch the stacks grow under `windy debug examples/storm.wnd`.
+      Step through ticks 1–14, watch IP0 and IP1 each build a stack
+      of 5 codepoints, and see them both vanish on tick 15.
+
+    - Slow down the cleanup with --max-steps cap:
+        windy run --max-steps 14 examples/storm.wnd
+      The IPs collide on tick 15, so a cap of 14 aborts before the
+      collision and the program exits 124 instead of 0. Useful for
+      the playground when you want to inspect mid-run state.
+
+    - For a non-fatal merge you'd need the converging IPs to arrive
+      with non-cancelling directions — e.g. one going south and one
+      going east, summing to (1, 1) southeast. That requires a 2D
+      layout with wind redirects (↘, ↙, ↗, ↖) post-`t`; head-on on
+      a single row always cancels.
