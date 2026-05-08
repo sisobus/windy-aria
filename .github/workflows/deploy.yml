@@ -1,0 +1,85 @@
+name: Deploy to S3 (/aria subpath)
+
+# windy-aria는 windy.sisobus.com/aria 로 배포된다. windy 본체와 같은 S3 버킷 +
+# CloudFront distribution을 공유하되, dist/ 산출물은 버킷의 `aria/` 접두사로
+# 들어간다. windy 측 deploy.yml은 `--exclude "aria/*"` 를 통해 이 디렉토리를
+# 보존하므로 두 워크플로우는 서로 덮어쓰지 않는다.
+#
+# 시크릿은 sisobus/windy 와 동일한 값을 windy-aria repo에 복사해 사용:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+#   AWS_S3_BUCKET, CLOUDFRONT_DISTRIBUTION_ID
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync site assets to S3 (except *.wasm)
+        run: |
+          if [ -z "$S3_BUCKET" ]; then
+            echo "S3 bucket secret (AWS_S3_BUCKET) is missing."
+            exit 1
+          fi
+          # `--delete` 는 dist/ 에 없는 파일을 s3://bucket/aria/ 에서 지운다.
+          # windy 본체 (s3://bucket/) 는 다른 prefix라 영향 없음.
+          aws s3 sync dist/ "s3://${S3_BUCKET}/aria/" \
+            --delete \
+            --exclude "*.wasm"
+
+      - name: Upload .wasm files with application/wasm Content-Type
+        run: |
+          # `aws s3 sync` 가 .wasm 을 application/octet-stream 으로 태깅하면
+          # 브라우저 stream-compile 이 깨짐. 명시적으로 다시 올린다.
+          # Vite 가 dist/assets/ 에 hashed 파일명으로 떨어뜨림.
+          for wasm in dist/assets/*.wasm; do
+            [ -e "$wasm" ] || continue
+            relpath="${wasm#dist/}"
+            aws s3 cp "$wasm" "s3://${S3_BUCKET}/aria/${relpath}" \
+              --content-type "application/wasm"
+          done
+
+      - name: Invalidate CloudFront cache (/aria/*)
+        if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/aria/*"
