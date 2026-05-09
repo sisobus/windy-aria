@@ -206,6 +206,84 @@ main {
   }
 }
 
+/*
+ * Curated song gallery — list of cards, each one click-to-play.
+ */
+.gallery {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gallery-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'title bpm'
+    'intent intent';
+  gap: 0.25rem 1rem;
+  text-align: left;
+  padding: 0.7rem 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: inherit;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gallery-item:hover:not(:disabled) {
+  background: rgba(125, 211, 252, 0.06);
+  border-color: rgba(125, 211, 252, 0.4);
+  filter: none;
+}
+
+.gallery-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gallery-title {
+  grid-area: title;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+}
+
+.gallery-bpm {
+  grid-area: bpm;
+  color: rgba(125, 211, 252, 0.85);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  align-self: center;
+}
+
+.gallery-intent {
+  grid-area: intent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: light) {
+  .gallery-item {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+  .gallery-title {
+    color: rgba(0, 0, 0, 0.9);
+  }
+  .gallery-intent {
+    color: rgba(0, 0, 0, 0.6);
+  }
+}
+
 .status {
   margin-top: 0.6rem;
   font-size: 0.82rem;

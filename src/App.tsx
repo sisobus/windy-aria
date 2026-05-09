@@ -10,6 +10,7 @@ import {
   type TickFrame,
 } from './interpreter/windy.ts';
 import { Grid } from './visualizer/Grid.tsx';
+import { SONGS, type Song } from './songs/index.ts';
 import './App.css';
 
 // Bundle windy/examples/*.wnd as raw strings at build time. Run
@@ -106,11 +107,20 @@ function App() {
   // ---------------------------------------------------------------- play
 
   async function handlePlay() {
+    await playSource(code, bpm);
+  }
+
+  /**
+   * Trace + schedule one program. Pulled out of handlePlay so the
+   * gallery can play a song without round-tripping through React
+   * state — setCode/setBpm batch and we'd otherwise read stale values.
+   */
+  async function playSource(src: string, atBpm: number) {
     setPlayError(null);
     setPlayStatus('loading');
     try {
       await ensureWindyInitialized();
-      const result = traceProgram(code);
+      const result = traceProgram(src);
       if (result.capReached) {
         // Infinite drift / loop — refuse to schedule 5 minutes of NOP audio.
         // Trapped runs are SPEC-defined terminations, so we still play those.
@@ -127,7 +137,7 @@ function App() {
         return;
       }
       const engine = ensureEngine();
-      engine.setBpm(bpm);
+      engine.setBpm(atBpm);
       await engine.resume();
 
       // Mirror the engine's startAt offset (engine.play uses
@@ -137,9 +147,9 @@ function App() {
       const startAt = ctx.currentTime + 0.1;
       engine.play(result.events);
 
-      startPlayVisualizer(result.frames, startAt, result.events[0]!.tick);
+      startPlayVisualizer(result.frames, startAt, result.events[0]!.tick, atBpm);
 
-      const totalSec = result.events.length * (60 / bpm) + 0.5;
+      const totalSec = result.events.length * (60 / atBpm) + 0.5;
       setPlayInfo({
         events: result.events.length,
         durationSec: totalSec,
@@ -165,18 +175,22 @@ function App() {
    *   t=0 (= `events[0].tick`). Frames whose tick is before this run
    *   during the engine's leading silence; we still display them so the
    *   IP visibly walks through pre-sound cells.
+   * @param atBpm Passed explicitly because callers (gallery loadSong)
+   *   may set BPM via setBpm just before, and React state isn't yet
+   *   reflected in the closure.
    */
   function startPlayVisualizer(
     frames: TickFrame[],
     startAt: number,
     audioBaseTick: number,
+    atBpm: number,
   ) {
     stopVisualizer();
     if (frames.length === 0) {
       setVisIps([]);
       return;
     }
-    const tickDur = 60 / bpm;
+    const tickDur = 60 / atBpm;
     const offset = audioBaseTick - frames[0]!.tick; // frames per leading silence
     setVisIps(frames[0]!.ips);
     let lastIdx = 0;
@@ -258,7 +272,7 @@ function App() {
       // Audio base = first event's tick (engine.play normalizes to it),
       // or fall back to the first frame's tick if no events fire.
       const audioBaseTick = events[0]?.tick ?? frames[0]!.tick;
-      startPlayVisualizer(frames, startAt, audioBaseTick);
+      startPlayVisualizer(frames, startAt, audioBaseTick, bpm);
     }
     setSnapshot(dbg.getSnapshot());
   }
@@ -279,6 +293,19 @@ function App() {
 
   function rollRandom() {
     setCode(generateRandomProgram());
+  }
+
+  /**
+   * Gallery click — switch to play mode, load the song's source and
+   * recommended BPM, and start playback in the same gesture. The
+   * source/BPM are passed to playSource explicitly because React
+   * hasn't flushed the setState calls yet.
+   */
+  async function loadSong(song: Song) {
+    if (mode !== 'play') setMode('play');
+    setCode(song.source);
+    setBpm(song.bpm);
+    await playSource(song.source, song.bpm);
   }
 
   const playing = playStatus === 'playing';
@@ -422,6 +449,28 @@ function App() {
               {debugStarted && <DebugPanel snap={snapshot} />}
             </>
           )}
+        </section>
+
+        <section className="panel">
+          <h2>Gallery</h2>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Curated windy programs written for listening. Click any to load and play.
+          </p>
+          <ul className="gallery">
+            {SONGS.map((song) => (
+              <li key={song.id}>
+                <button
+                  className="gallery-item"
+                  onClick={() => loadSong(song)}
+                  disabled={loading || playing}
+                >
+                  <span className="gallery-title">{song.title}</span>
+                  <span className="gallery-bpm">{song.bpm} bpm</span>
+                  {song.intent && <span className="gallery-intent">{song.intent}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="panel">
