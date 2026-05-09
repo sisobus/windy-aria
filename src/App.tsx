@@ -11,6 +11,7 @@ import {
 } from './interpreter/windy.ts';
 import { Grid } from './visualizer/Grid.tsx';
 import { SONGS, type Song } from './songs/index.ts';
+import { decodeShareHash, encodeShareHash } from './share/url.ts';
 import './App.css';
 
 // Bundle windy/examples/*.wnd as raw strings at build time. Run
@@ -34,13 +35,20 @@ const EXAMPLES: Record<string, string> = Object.fromEntries(
 
 // hello.wnd is the shortest, clearest first impression — use it as the default.
 const DEFAULT_PROGRAM = EXAMPLES['hello'] ?? Object.values(EXAMPLES)[0] ?? '';
+const DEFAULT_BPM = 360;
+
+// Read the initial source/BPM from the URL hash once, at module load.
+// Hash format documented in src/share/url.ts.
+const INITIAL_FROM_HASH =
+  typeof window === 'undefined' ? {} : decodeShareHash(window.location.hash);
 
 type Mode = 'play' | 'debug';
 
 function App() {
-  const [bpm, setBpm] = useState(360);
-  const [code, setCode] = useState(DEFAULT_PROGRAM);
+  const [bpm, setBpm] = useState(INITIAL_FROM_HASH.bpm ?? DEFAULT_BPM);
+  const [code, setCode] = useState(INITIAL_FROM_HASH.source ?? DEFAULT_PROGRAM);
   const [mode, setMode] = useState<Mode>('play');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
   // play-mode state
   const [playStatus, setPlayStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
@@ -95,6 +103,30 @@ function App() {
     stopVisualizer();
     setVisIps([]);
   }, [code, mode]);
+
+  // Mirror the current source + BPM into the URL hash. Debounced so a
+  // user typing in the editor doesn't churn history entries.
+  // history.replaceState (not pushState) keeps the back button useful.
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const hash = code ? encodeShareHash(code, bpm, DEFAULT_BPM) : '';
+      const next = window.location.pathname + window.location.search + hash;
+      window.history.replaceState(null, '', next);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [code, bpm]);
+
+  async function copyShareLink() {
+    try {
+      const hash = encodeShareHash(code, bpm, DEFAULT_BPM);
+      const url = window.location.origin + window.location.pathname + window.location.search + hash;
+      await navigator.clipboard.writeText(url);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('error');
+    }
+    window.setTimeout(() => setCopyStatus('idle'), 1800);
+  }
 
   function ensureEngine(): SequenceEngine {
     if (!ctxRef.current) {
@@ -375,6 +407,17 @@ function App() {
                 🎲 random
               </button>
             </span>
+            <button
+              className="link-btn share-btn"
+              onClick={copyShareLink}
+              title="Copy a permalink (code + BPM) to the clipboard"
+            >
+              {copyStatus === 'copied'
+                ? '✓ link copied'
+                : copyStatus === 'error'
+                  ? '⚠ copy failed'
+                  : '🔗 copy share link'}
+            </button>
           </div>
 
           <textarea
