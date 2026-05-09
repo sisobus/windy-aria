@@ -15,8 +15,8 @@ importers:
         specifier: latest
         version: 19.2.6(react@19.2.6)
       windy-lang:
-        specifier: ^2.2.0
-        version: 2.2.0
+        specifier: ^2.2.1
+        version: 2.2.1
     devDependencies:
       '@types/react':
         specifier: latest
@@ -366,8 +366,8 @@ packages:
       yaml:
         optional: true
 
-  windy-lang@2.2.0:
-    resolution: {integrity: sha512-l0RMU1x6VlHtyNtlNpLLpKAYq5/lqCLbhYHuL6MexyzLZNUGm/Qou9RkFzR+BEERocE9z3Kk7uoiL7AC7E3ANw==}
+  windy-lang@2.2.1:
+    resolution: {integrity: sha512-hFjshhtgv3uut8SQKXUHwVpyBKZrGNUWwyQ812trr6sXSJPLaO0KOJg/8yLRJkKq5qm4J+BPloyS6qJTdPR28A==}
 
 snapshots:
 
@@ -591,4 +591,4 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  windy-lang@2.2.0: {}
+  windy-lang@2.2.1: {}

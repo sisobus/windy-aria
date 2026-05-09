@@ -14,7 +14,7 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "windy-lang": "^2.2.0"
+    "windy-lang": "^2.2.1"
   },
   "devDependencies": {
     "@types/react": "latest",
