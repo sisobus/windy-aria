@@ -358,6 +358,49 @@ function App() {
     setVisIps([]);
   }
 
+  /**
+   * Keyboard shortcuts active while in debug mode. Mirrors the bindings
+   * on windy.sisobus.com (`s`/Enter step, `c` continue, `r` restart,
+   * `q`/Escape exit) so users moving between the two pages share one
+   * mental model. We skip when a textarea/input has focus so typing
+   * `c`/`r`/`q` into the editor doesn't trigger debug actions.
+   */
+  useEffect(() => {
+    if (mode !== 'debug') return;
+
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return;
+
+      const dbg = debuggerRef.current;
+      const dbgDone = snapshot !== null && (snapshot.halted || snapshot.trapped);
+
+      if (e.key === 'Enter' || e.key === 's') {
+        e.preventDefault();
+        if (!dbg) {
+          void startDebug();
+        } else if (!dbgDone) {
+          void stepOnce();
+        }
+      } else if (e.key === 'c') {
+        e.preventDefault();
+        if (dbg && !dbgDone) void continueRun();
+      } else if (e.key === 'r') {
+        e.preventDefault();
+        // restart = reset then start fresh, in one keypress.
+        resetDebug();
+        void startDebug();
+      } else if (e.key === 'q' || e.key === 'Escape') {
+        e.preventDefault();
+        setMode('play');
+      }
+    };
+
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [mode, snapshot]);
+
   function loadExample(key: string) {
     const program = EXAMPLES[key];
     if (program) setCode(program);
@@ -505,18 +548,27 @@ function App() {
             <>
               <div className="row" style={{ marginTop: '0.6rem' }}>
                 {!debugStarted && (
-                  <button onClick={startDebug}>⏵ Start debugging</button>
+                  <button onClick={startDebug} title="Start debug session (s / Enter)">
+                    ⏵ Start debugging
+                  </button>
                 )}
                 {debugStarted && (
                   <>
-                    <button onClick={stepOnce} disabled={debugDone}>
-                      ▷ Step
+                    <button onClick={stepOnce} disabled={debugDone} title="Step (s / Enter)">
+                      ▷ Step <kbd className="key-hint">s</kbd>
                     </button>
-                    <button onClick={continueRun} disabled={debugDone}>
-                      ▶▶ Continue
+                    <button onClick={continueRun} disabled={debugDone} title="Run to halt (c)">
+                      ▶▶ Continue <kbd className="key-hint">c</kbd>
                     </button>
-                    <button onClick={resetDebug} className="secondary">
-                      ↺ Reset
+                    <button
+                      onClick={() => {
+                        resetDebug();
+                        void startDebug();
+                      }}
+                      className="secondary"
+                      title="Restart from the beginning (r)"
+                    >
+                      ↺ Restart <kbd className="key-hint">r</kbd>
                     </button>
                   </>
                 )}
@@ -526,13 +578,20 @@ function App() {
                 {!debugError && !debugStarted && (
                   <span className="hint">
                     Start debugging to step through one instruction at a time and hear each one as
-                    it executes.
+                    it executes. Shortcuts: <kbd>s</kbd>/<kbd>Enter</kbd> step, <kbd>c</kbd>{' '}
+                    continue, <kbd>r</kbd> restart, <kbd>Esc</kbd> exit.
                   </span>
                 )}
                 {!debugError && debugDone && (
                   <span>
                     {snapshot.halted ? '✓ Halted cleanly' : '⚠ Trapped'} · {snapshot.stepCount}{' '}
-                    steps
+                    steps · press <kbd>r</kbd> to restart
+                  </span>
+                )}
+                {!debugError && debugStarted && !debugDone && (
+                  <span className="hint">
+                    <kbd>s</kbd>/<kbd>Enter</kbd> step · <kbd>c</kbd> continue ·{' '}
+                    <kbd>r</kbd> restart · <kbd>Esc</kbd> exit
                   </span>
                 )}
               </div>

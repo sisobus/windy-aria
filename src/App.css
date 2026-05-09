@@ -357,6 +357,55 @@ button.secondary {
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+/*
+ * Inline keycap badge — used both inside buttons and in shortcut hints.
+ */
+kbd,
+.key-hint {
+  display: inline-block;
+  font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 2px 5px;
+  margin: 0 1px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  font-weight: 500;
+  vertical-align: baseline;
+}
+
+button .key-hint {
+  /* Button background is bright; flip the chip to a darker
+     contrast for legibility against the button's color. */
+  margin-left: 0.4rem;
+  background: rgba(10, 14, 26, 0.4);
+  color: inherit;
+  border-color: rgba(10, 14, 26, 0.5);
+  opacity: 0.85;
+}
+
+button.secondary .key-hint {
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (prefers-color-scheme: light) {
+  kbd,
+  .key-hint {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.78);
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+  button .key-hint {
+    background: rgba(255, 255, 255, 0.5);
+    color: inherit;
+    border-color: rgba(0, 0, 0, 0.18);
+  }
+}
+
 button.secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.06);
   filter: none;
