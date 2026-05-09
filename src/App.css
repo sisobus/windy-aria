@@ -523,3 +523,81 @@ footer .sep {
 .panel a:hover {
   text-decoration: underline;
 }
+
+/* ---------- mobile ---------- */
+/*
+ * Aligns with windy.sisobus.com's 800 px breakpoint. Three goals:
+ *   1. iOS Safari auto-zooms when a focused input has font-size < 16px.
+ *      Bump the editor textarea to 16px so tapping into it doesn't
+ *      jump the page.
+ *   2. Tighten panel / toolbar padding so the page doesn't feel
+ *      breathing-heavy on a narrow viewport.
+ *   3. Reduce inter-panel gap.
+ */
+@media (max-width: 800px) {
+  .app {
+    gap: 0.75rem;
+  }
+
+  main {
+    gap: 0.75rem;
+  }
+
+  .panel {
+    padding: 0.7rem 0.8rem;
+  }
+
+  .row {
+    gap: 0.45rem;
+  }
+
+  .toolbar {
+    padding: 0;
+  }
+
+  .code {
+    /* Suppress iOS Safari focus-zoom. */
+    font-size: 16px;
+  }
+
+  .visualizer {
+    /* Match the editor's mobile font so the grid still aligns. */
+    font-size: 16px;
+  }
+
+  button {
+    padding: 0.4rem 0.85rem;
+    min-height: 38px;
+  }
+
+  .mode-toggle button {
+    /* Mode toggle stays compact — it's not a primary action. */
+    min-height: 0;
+    padding: 0.3rem 0.7rem;
+  }
+
+  .link-btn {
+    /* Larger tap target for examples / random / share row. */
+    padding: 0.25rem 0.5rem;
+  }
+
+  .gallery-item {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .gallery-bpm {
+    /* Push BPM badge under title on the narrowest devices to avoid
+       a too-cramped two-column row. */
+    font-size: 0.74rem;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  footer {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    font-size: 0.75rem;
+  }
+}
