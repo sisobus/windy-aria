@@ -436,10 +436,10 @@ function App() {
     <div className="app">
       <header>
         <h1>
-          windy-<span className="accent">aria</span>
+          Windy-<span className="accent">aria</span>
         </h1>
         <p className="tagline">
-          A sonification of <a href="https://windy.sisobus.com/" target="_blank" rel="noreferrer">windy-lang</a> —
+          A sonification of <a href="https://windy.sisobus.com/" target="_blank" rel="noreferrer">Windy</a> —
           the wind is the melody.{' '}
           <a href="https://github.com/sisobus/windy-aria" target="_blank" rel="noreferrer">GitHub</a>{' '}
           ·{' '}
