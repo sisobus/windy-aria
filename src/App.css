@@ -411,7 +411,8 @@ button.secondary:hover:not(:disabled) {
   filter: none;
 }
 
-.debug-panel {
+.debug-panel,
+.play-output {
   margin-top: 0.8rem;
   padding: 0.85rem 1rem;
   background: rgba(0, 0, 0, 0.3);

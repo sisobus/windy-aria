@@ -59,6 +59,8 @@ function App() {
     durationSec: number;
     trapped: boolean;
     stepCount: number;
+    stdout: string;
+    stderr: string;
   } | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
 
@@ -227,6 +229,8 @@ function App() {
         durationSec: totalSec,
         trapped: result.trapped,
         stepCount: result.stepCount,
+        stdout: result.stdout,
+        stderr: result.stderr,
       });
       setPlayStatus('playing');
       window.setTimeout(() => setPlayStatus('idle'), totalSec * 1000);
@@ -541,6 +545,20 @@ function App() {
                   <span className="hint">Enter windy-lang code and press Play.</span>
                 )}
               </div>
+              {playInfo && (playInfo.stdout || playInfo.stderr) && (
+                <div className="play-output">
+                  {playInfo.stdout && (
+                    <Field label="stdout">
+                      <pre className="output">{playInfo.stdout}</pre>
+                    </Field>
+                  )}
+                  {playInfo.stderr && (
+                    <Field label="stderr">
+                      <pre className="output dim">{playInfo.stderr}</pre>
+                    </Field>
+                  )}
+                </div>
+              )}
             </>
           )}
 

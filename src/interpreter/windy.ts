@@ -167,6 +167,10 @@ export interface TraceResult {
   capReached: boolean;
   /** Tick count actually advanced. */
   stepCount: number;
+  /** Cumulative stdout from PUT_NUM / PUT_CHR. */
+  stdout: string;
+  /** Cumulative stderr (sisobus banner + warnings). */
+  stderr: string;
 }
 
 /**
@@ -182,6 +186,9 @@ export function traceProgram(source: string, options: RunOptions = {}): TraceRes
   const halted = dbg.halted;
   const trapped = dbg.trapped;
   const stepCount = dbg.stepCount;
+  // Capture I/O before free — the wasm session is gone afterwards.
+  const stdout = dbg.stdout;
+  const stderr = dbg.stderr;
   dbg.free();
   return {
     events,
@@ -190,6 +197,8 @@ export function traceProgram(source: string, options: RunOptions = {}): TraceRes
     trapped,
     capReached: !halted && !trapped,
     stepCount,
+    stdout,
+    stderr,
   };
 }
 
@@ -219,6 +228,16 @@ export class WindyDebugger {
 
   get trapped(): boolean {
     return this.session.trapped;
+  }
+
+  /** Cumulative stdout (PUT_NUM / PUT_CHR output). */
+  get stdout(): string {
+    return this.session.stdout();
+  }
+
+  /** Cumulative stderr (sisobus banner + warnings). */
+  get stderr(): string {
+    return this.session.stderr();
   }
 
   /**
