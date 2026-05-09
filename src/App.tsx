@@ -12,6 +12,7 @@ import {
 import { Grid } from './visualizer/Grid.tsx';
 import { SONGS, type Song } from './songs/index.ts';
 import { decodeShareHash, encodeShareHash } from './share/url.ts';
+import { downloadBlob, renderEventsToWav } from './export/wav.ts';
 import './App.css';
 
 // Bundle windy/examples/*.wnd as raw strings at build time. Run
@@ -49,6 +50,7 @@ function App() {
   const [code, setCode] = useState(INITIAL_FROM_HASH.source ?? DEFAULT_PROGRAM);
   const [mode, setMode] = useState<Mode>('play');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [wavStatus, setWavStatus] = useState<'idle' | 'rendering' | 'error'>('idle');
 
   // play-mode state
   const [playStatus, setPlayStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
@@ -115,6 +117,44 @@ function App() {
     }, 300);
     return () => window.clearTimeout(handle);
   }, [code, bpm]);
+
+  /**
+   * Render the current code at the current BPM into a 16-bit mono WAV
+   * and trigger a browser download. Reuses the same Synth that drives
+   * live playback against an OfflineAudioContext, so what you hear is
+   * what you save.
+   */
+  async function downloadWav() {
+    setPlayError(null);
+    setWavStatus('rendering');
+    try {
+      await ensureWindyInitialized();
+      const result = traceProgram(code);
+      if (result.capReached) {
+        setPlayError(
+          `Code does not halt (cap reached at ${result.stepCount} steps). ` +
+            `Make sure the IP can reach an @ or end via IP collision merge.`,
+        );
+        setWavStatus('error');
+        window.setTimeout(() => setWavStatus('idle'), 1800);
+        return;
+      }
+      if (result.events.length === 0) {
+        setPlayError('No executable instructions — check your code.');
+        setWavStatus('error');
+        window.setTimeout(() => setWavStatus('idle'), 1800);
+        return;
+      }
+      const blob = await renderEventsToWav(result.events, { bpm });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      downloadBlob(blob, `windy-aria-${bpm}bpm-${ts}.wav`);
+      setWavStatus('idle');
+    } catch (e) {
+      setPlayError(e instanceof Error ? e.message : String(e));
+      setWavStatus('error');
+      window.setTimeout(() => setWavStatus('idle'), 1800);
+    }
+  }
 
   async function copyShareLink() {
     try {
@@ -435,6 +475,14 @@ function App() {
               <div className="row" style={{ marginTop: '0.6rem' }}>
                 <button onClick={handlePlay} disabled={loading || playing}>
                   {playing ? '▶ Playing' : loading ? 'Loading…' : '▶ Play'}
+                </button>
+                <button
+                  className="secondary"
+                  onClick={downloadWav}
+                  disabled={loading || playing || wavStatus === 'rendering'}
+                  title="Render the current code to a WAV file and download"
+                >
+                  {wavStatus === 'rendering' ? 'Rendering…' : '⬇ Download WAV'}
                 </button>
               </div>
               <div className="status">

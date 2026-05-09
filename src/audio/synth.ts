@@ -13,7 +13,7 @@ import type { SoundEvent, Timbre } from '../types.ts';
 
 let noiseBuffer: AudioBuffer | null = null;
 
-function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
+function getNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {
   if (noiseBuffer && noiseBuffer.sampleRate === ctx.sampleRate) {
     return noiseBuffer;
   }
@@ -37,10 +37,14 @@ function isGlissando(event: SoundEvent): { from: number; to: number } | null {
 }
 
 export class Synth {
-  private ctx: AudioContext;
+  private ctx: BaseAudioContext;
   private master: GainNode;
 
-  constructor(ctx: AudioContext) {
+  /**
+   * Accepts any BaseAudioContext, so the same synth path drives both
+   * live AudioContext playback and OfflineAudioContext WAV rendering.
+   */
+  constructor(ctx: BaseAudioContext) {
     this.ctx = ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0.6;
