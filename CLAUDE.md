@@ -211,30 +211,12 @@ windy SPEC을 만지면서 windy-aria로 즉시 검증해야 할 때:
 | 영역 | 비고 |
 |---|---|
 | 다중 IP polyphony | windy-lang 에 `current_op_for(ip_index)` API 추가 필요 (cross-repo). 현재 primary IP 만 sonify |
-| `docs/MAPPING.md` 영문화 | 프로젝트 외부 surface 는 모두 영문이지만 이 문서만 한국어 |
 
 ## 다음 세션 프롬프트
 
-각 항목은 **이 windy-aria 디렉토리에서 새 Claude Code 세션을 열고** 그대로 붙여넣으면 됩니다. 권장 진행 순서: 1 → 2.
+각 항목은 **이 windy-aria 디렉토리에서 새 Claude Code 세션을 열고** 그대로 붙여넣으면 됩니다.
 
-### 1. docs/MAPPING.md 영문화
-
-```
-windy-aria 의 docs/MAPPING.md 가 한국어로 남아있는데, 프로젝트의 다른 모든
-external surface (README, UI, source comments, repo description) 는 영문이라
-일관성이 깨진다. 이 문서를 영문으로 옮겨줘.
-
-- 코드 변경 0 — 순수 문서 작업
-- 톤은 windy/SPEC.md 와 windy-aria/README.md 에 맞춤 (technical, 직설적)
-- 표 / 주파수 / 매핑 명세는 그대로 보존, 한국어 산문만 번역
-- 번역 끝나면 README.md 에 있는 "*(Currently in Korean — English
-  translation pending.)*" 주석 제거
-- CLAUDE.md "v1.1 후속" 에서 이 항목 완료 처리
-
-commit + push.
-```
-
-### 2. 다중 IP polyphony (cross-repo, v1.1)
+### 1. 다중 IP polyphony (cross-repo, v1.1)
 
 ```
 windy-aria 가 SPLIT 으로 분기된 IP 들을 별도 voice 로 합성하도록 만들고 싶다.

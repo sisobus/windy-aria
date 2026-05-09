@@ -161,7 +161,6 @@ windy-lang (npm: windy-lang@^2.1.0)
 
 - **[`docs/MAPPING.md`](docs/MAPPING.md)** — complete opcode →
   sound table with frequencies, durations, and design rationale.
-  *(Currently in Korean — English translation pending.)*
 - **[`CLAUDE.md`](CLAUDE.md)** — development context for AI
   pair-programming.
 - **[`SPEC.md` over in `sisobus/windy`](https://github.com/sisobus/windy/blob/main/SPEC.md)**
