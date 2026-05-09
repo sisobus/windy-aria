@@ -215,11 +215,14 @@ export class WindyDebugger {
 
   constructor(source: string, options: RunOptions = {}) {
     // Guard against infinite drift — an IP that walks off-grid never
-    // traps because the SPEC grid is infinite. The 4000-step / 500-event
-    // cap maps to roughly 60–90s of sonification at 360 BPM.
+    // traps because the SPEC grid is infinite. The wasm session's
+    // step cap is the real guard; we align maxEvents with it so any
+    // program that *halts* within the step budget is fully playable.
+    // Earlier defaults capped events at 500, which spuriously rejected
+    // legitimate halts like factorial.wnd (912) and stars.wnd (833).
     const maxSteps = options.maxSteps ?? BigInt(4000);
     this.session = new Session(source, '', options.seed ?? null, maxSteps);
-    this.maxEvents = options.maxEvents ?? 500;
+    this.maxEvents = options.maxEvents ?? Number(maxSteps);
   }
 
   get halted(): boolean {
