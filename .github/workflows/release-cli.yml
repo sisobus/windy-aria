@@ -1,0 +1,110 @@
+name: Release windy-aria CLI to crates.io
+
+# Triggered by pushing a `cli-vX.Y.Z` tag. windy-aria the web app may
+# adopt its own `v*` tag scheme later; this prefix scopes the trigger
+# to the Rust CLI in `cli/`. Confirms the tag matches `cli/Cargo.toml`'s
+# version, builds, dry-run publishes, then `cargo publish`es and
+# creates a matching GitHub Release.
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. cli-v0.1.0). Must already exist on origin.'
+        required: true
+        type: string
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: Resolve tag and crate version
+        id: meta
+        working-directory: cli
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^cli-v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::tag '$TAG' is not in cli-vX.Y.Z form"
+            exit 1
+          fi
+          VERSION="${TAG#cli-v}"
+          CARGO_VERSION=$(awk -F'"' '/^version *= *"/ { print $2; exit }' Cargo.toml)
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "::error::tag $TAG ($VERSION) does not match cli/Cargo.toml version $CARGO_VERSION"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: cargo build (verify it compiles)
+        working-directory: cli
+        run: cargo build --release
+
+      - name: cargo publish (dry-run)
+        working-directory: cli
+        run: cargo publish --dry-run
+
+      - name: cargo publish
+        working-directory: cli
+        run: cargo publish
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          cat >/tmp/notes.md <<EOF
+          windy-aria CLI v${VERSION} published to crates.io.
+
+          Install:
+
+              cargo install windy-aria
+
+          Use:
+
+              windy-aria programs/foo.wnd
+              windy-aria programs/foo.wnd --bpm 120 -o my.wav
+
+          Also works as a windy-lang plugin:
+
+              windy aria programs/foo.wnd
+
+          See [\`cli/README.md\`](https://github.com/sisobus/windy-aria/blob/main/cli/README.md) for the full reference.
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists, skipping create"
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file /tmp/notes.md
+          fi

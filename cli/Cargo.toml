@@ -1,0 +1,30 @@
+[package]
+name = "windy-aria"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Offline sonification CLI for windy-lang programs. Renders a `.wnd` source to a `.wav` audio file via opcode→sound mapping + ADSR-shaped oscillators. Also a `windy aria` plugin for windy-lang."
+authors = ["Kim Sangkeun (sisobus) <windy@classum.com>"]
+license = "MIT"
+homepage = "https://github.com/sisobus/windy-aria"
+repository = "https://github.com/sisobus/windy-aria"
+documentation = "https://github.com/sisobus/windy-aria/blob/main/cli/README.md"
+readme = "README.md"
+keywords = ["sonification", "audio", "esolang", "wav", "synth"]
+categories = ["command-line-utilities", "multimedia::audio"]
+include = [
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/src/**/*.rs",
+]
+
+[[bin]]
+name = "windy-aria"
+path = "src/main.rs"
+
+[dependencies]
+windy-lang = "^2.3"
+clap = { version = "4", features = ["derive"] }
+hound = "3"
+anyhow = "1"
